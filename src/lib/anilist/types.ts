@@ -34,15 +34,23 @@ export interface AniListMedia {
   id: number;
   idMal: number | null;
   title: AniListMediaTitle;
+  description: string | null;
   episodes: number | null;
+  chapters: number | null;
+  volumes: number | null;
   status: AniListMediaStatus;
   coverImage: AniListCoverImage;
+  bannerImage: string | null;
+  averageScore: number | null;
+  startDate: AniListFuzzyDate;
+  endDate: AniListFuzzyDate;
 }
 
 export interface AniListMediaList {
   id: number;
   status: AniListStatus;
   progress: number;
+  progressVolumes: number | null;
   score: number;
   notes: string | null;
   repeat: number;
@@ -58,7 +66,7 @@ export interface AniListPageInfo {
   currentPage: number;
 }
 
-export interface AniListResponse {
+export interface AniListListResponse {
   data: {
     Page: {
       pageInfo: AniListPageInfo;

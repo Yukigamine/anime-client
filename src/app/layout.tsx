@@ -1,5 +1,7 @@
+import { Box } from "@mui/material";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import NavBar from "@/components/NavBar";
 import ThemeRegistry from "@/components/ThemeRegistry";
 import "./globals.css";
 
@@ -14,19 +16,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Anime List",
-  description: "Personal anime tracking list",
+  title: "Anime Client",
+  description: "Personal anime & manga tracking",
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        <ThemeRegistry>{children}</ThemeRegistry>
+        <ThemeRegistry>
+          <NavBar />
+          <Box component="main">{children}</Box>
+        </ThemeRegistry>
       </body>
     </html>
   );

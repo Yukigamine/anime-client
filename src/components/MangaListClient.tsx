@@ -11,31 +11,31 @@ import {
   Typography,
 } from "@mui/material";
 import { useMemo, useState } from "react";
-import type { AnimeWithEntry } from "@/lib/list";
-import AnimeCard from "./AnimeCard";
+import type { MangaWithEntry } from "@/lib/list";
+import MangaCard from "./MangaCard";
 
 type StatusTab =
   | "ALL"
-  | "WATCHING"
+  | "READING"
   | "COMPLETED"
-  | "PLAN_TO_WATCH"
+  | "PLAN_TO_READ"
   | "ON_HOLD"
   | "DROPPED";
 
 const TABS: { value: StatusTab; label: string }[] = [
   { value: "ALL", label: "All" },
-  { value: "WATCHING", label: "Watching" },
+  { value: "READING", label: "Reading" },
   { value: "COMPLETED", label: "Completed" },
-  { value: "PLAN_TO_WATCH", label: "Plan to Watch" },
+  { value: "PLAN_TO_READ", label: "Plan to Read" },
   { value: "ON_HOLD", label: "On Hold" },
   { value: "DROPPED", label: "Dropped" },
 ];
 
-export default function AnimeListClient({
+export default function MangaListClient({
   items,
   counts,
 }: {
-  items: AnimeWithEntry[];
+  items: MangaWithEntry[];
   counts: Record<string, number>;
 }) {
   const [activeTab, setActiveTab] = useState<StatusTab>("ALL");
@@ -44,7 +44,7 @@ export default function AnimeListClient({
   const filtered = useMemo(() => {
     let list = items;
     if (activeTab !== "ALL") {
-      list = list.filter((i) => i.listEntry?.watchStatus === activeTab);
+      list = list.filter((i) => i.listEntry?.readStatus === activeTab);
     }
     const q = search.trim().toLowerCase();
     if (q) {
@@ -134,7 +134,7 @@ export default function AnimeListClient({
         <Grid container spacing={2}>
           {filtered.map((item) => (
             <Grid key={item.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-              <AnimeCard item={item} />
+              <MangaCard item={item} />
             </Grid>
           ))}
         </Grid>

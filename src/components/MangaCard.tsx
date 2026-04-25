@@ -10,32 +10,40 @@ import {
   Typography,
 } from "@mui/material";
 import Image from "next/image";
-import type { AnimeListEntry } from "@/generated/prisma/client";
-import type { AnimeWithEntry } from "@/lib/list";
+import type { MangaListEntry } from "@/generated/prisma/client";
+import type { MangaWithEntry } from "@/lib/list";
 
 const STATUS_COLORS = {
-  WATCHING: "primary",
-  PLAN_TO_WATCH: "default",
+  READING: "primary",
+  PLAN_TO_READ: "default",
   COMPLETED: "success",
   ON_HOLD: "warning",
   DROPPED: "error",
 } as const;
 
-const STATUS_LABELS: Record<AnimeListEntry["watchStatus"], string> = {
-  WATCHING: "Watching",
-  PLAN_TO_WATCH: "Plan to Watch",
+const STATUS_LABELS: Record<MangaListEntry["readStatus"], string> = {
+  READING: "Reading",
+  PLAN_TO_READ: "Plan to Read",
   COMPLETED: "Completed",
   ON_HOLD: "On Hold",
   DROPPED: "Dropped",
 };
 
-export default function AnimeCard({ item }: { item: AnimeWithEntry }) {
+export default function MangaCard({ item }: { item: MangaWithEntry }) {
   const entry = item.listEntry;
   const title = item.titleEn ?? item.titleRomaji ?? item.titleJp ?? "Unknown";
-  const progress =
-    item.episodeCount != null
-      ? `${entry?.progress ?? 0} / ${item.episodeCount} ep`
-      : `${entry?.progress ?? 0} ep`;
+
+  const chapterProgress =
+    item.chapterCount != null
+      ? `${entry?.progress ?? 0} / ${item.chapterCount} ch`
+      : `${entry?.progress ?? 0} ch`;
+
+  const volumeProgress =
+    (entry?.progressVolumes ?? 0) > 0
+      ? item.volumeCount != null
+        ? `${entry?.progressVolumes} / ${item.volumeCount} vol`
+        : `${entry?.progressVolumes} vol`
+      : null;
 
   return (
     <Card
@@ -123,18 +131,23 @@ export default function AnimeCard({ item }: { item: AnimeWithEntry }) {
         >
           {entry && (
             <Chip
-              label={STATUS_LABELS[entry.watchStatus]}
-              color={STATUS_COLORS[entry.watchStatus]}
+              label={STATUS_LABELS[entry.readStatus]}
+              color={STATUS_COLORS[entry.readStatus]}
               size="small"
               sx={{ fontWeight: 500 }}
             />
           )}
           <Typography variant="body2" color="text.secondary">
-            {progress}
+            {chapterProgress}
           </Typography>
-          {(entry?.rewatchCount ?? 0) > 0 && (
+          {volumeProgress && (
+            <Typography variant="body2" color="text.secondary">
+              · {volumeProgress}
+            </Typography>
+          )}
+          {(entry?.rereadCount ?? 0) > 0 && (
             <Typography variant="caption" color="text.disabled">
-              ×{entry?.rewatchCount}
+              ×{entry?.rereadCount}
             </Typography>
           )}
         </Box>
