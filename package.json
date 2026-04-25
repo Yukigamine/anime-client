@@ -16,7 +16,13 @@
     "@mui/icons-material": "^7.3.2",
     "@mui/material": "^7.3.2",
     "@mui/material-nextjs": "^7.3.2",
+    "@neondatabase/serverless": "^1.1.0",
+    "@prisma/adapter-neon": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "@vercel/kv": "^3.0.0",
+    "dotenv": "^17.4.2",
     "next": "15.5.2",
+    "prisma": "^7.8.0",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },

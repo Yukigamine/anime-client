@@ -1,0 +1,68 @@
+export type AniListStatus =
+  | "CURRENT"
+  | "COMPLETED"
+  | "PLANNING"
+  | "PAUSED"
+  | "DROPPED"
+  | "REPEATING";
+
+export type AniListMediaStatus =
+  | "FINISHED"
+  | "RELEASING"
+  | "NOT_YET_RELEASED"
+  | "CANCELLED"
+  | "HIATUS";
+
+export interface AniListFuzzyDate {
+  year: number | null;
+  month: number | null;
+  day: number | null;
+}
+
+export interface AniListMediaTitle {
+  english: string | null;
+  romaji: string | null;
+  native: string | null;
+}
+
+export interface AniListCoverImage {
+  large: string | null;
+  medium: string | null;
+}
+
+export interface AniListMedia {
+  id: number;
+  idMal: number | null;
+  title: AniListMediaTitle;
+  episodes: number | null;
+  status: AniListMediaStatus;
+  coverImage: AniListCoverImage;
+}
+
+export interface AniListMediaList {
+  id: number;
+  status: AniListStatus;
+  progress: number;
+  score: number;
+  notes: string | null;
+  repeat: number;
+  private: boolean;
+  startedAt: AniListFuzzyDate;
+  completedAt: AniListFuzzyDate;
+  updatedAt: number;
+  media: AniListMedia;
+}
+
+export interface AniListPageInfo {
+  hasNextPage: boolean;
+  currentPage: number;
+}
+
+export interface AniListResponse {
+  data: {
+    Page: {
+      pageInfo: AniListPageInfo;
+      mediaList: AniListMediaList[];
+    };
+  };
+}

@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WatchStatus {
+  WATCHING
+  PLAN_TO_WATCH
+  COMPLETED
+  ON_HOLD
+  DROPPED
+}
+
+enum ShowStatus {
+  AIRING
+  FINISHED
+  UPCOMING
+  CANCELLED
+  UNKNOWN
+}
+
+enum SyncSource {
+  KITSU
+  ANILIST
+  MANUAL
+}
+
+model AnimeEntry {
+  id String @id @default(cuid())
+
+  // External IDs
+  kitsuId   String? @unique
+  anilistId Int?    @unique
+  malId     Int?    @unique
+
+  // Anime metadata (synced from external API)
+  titleEn       String?
+  titleJp       String?
+  titleRomaji   String?
+  coverImageUrl String?
+  episodeCount  Int?
+  showStatus    ShowStatus @default(UNKNOWN)
+
+  // User list data
+  watchStatus  WatchStatus
+  progress     Int         @default(0)
+  rating       Float? // normalized 0–10
+  notes        String?
+  private      Boolean     @default(false)
+  rewatchCount Int         @default(0)
+  rewatching   Boolean     @default(false)
+
+  // Sync tracking
+  syncSource      SyncSource @default(MANUAL)
+  kitsuSyncedAt   DateTime?
+  anilistSyncedAt DateTime?
+
+  // User dates
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
