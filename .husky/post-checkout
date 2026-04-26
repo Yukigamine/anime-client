@@ -1,0 +1,11 @@
+#!/bin/sh
+# $3 is 1 if it was a branch checkout, 0 if it was a file checkout
+if [ "$3" = "1" ]; then
+  # Check if pnpm-lock.yaml differs between the old and new branch
+  if git diff --quiet "$1" "$2" -- pnpm-lock.yaml; then
+    exit 0
+  else
+    echo "Lockfile changed during branch switch. Running pnpm install..."
+    pnpm install
+  fi
+fi

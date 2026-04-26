@@ -1,0 +1,7 @@
+allowBuilds:
+  '@mui/x-telemetry': true
+  '@prisma/engines': true
+  '@swc/core': true
+  esbuild: true
+  prisma: true
+  sharp: true
