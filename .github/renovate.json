@@ -1,0 +1,29 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "matchManagers": ["npm"],
+      "rangeStrategy": "pin"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "rangeStrategy": "replace"
+    },
+    {
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "matchPackageNames": ["@biomejs/biome"],
+      "postUpgradeTasks": {
+        "commands": [
+          "pnpm dlx @biomejs/biome@{{{newVersion}}} migrate --write",
+          "pnpm dlx @biomejs/biome@{{{newVersion}}} check --write"
+        ],
+        "fileFilters": ["**/*"],
+        "executionMode": "branch"
+      }
+    }
+  ]
+}
