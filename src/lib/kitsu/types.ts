@@ -3,8 +3,6 @@ export interface KitsuUser {
   attributes: { name: string };
 }
 
-// ─── Anime ────────────────────────────────────────────────────────────────────
-
 export interface KitsuAnimeAttributes {
   canonicalTitle: string;
   titles: { en?: string; en_jp?: string; ja_jp?: string };
@@ -29,8 +27,6 @@ export interface KitsuAnime {
   attributes: KitsuAnimeAttributes;
 }
 
-// ─── Manga ────────────────────────────────────────────────────────────────────
-
 export interface KitsuMangaAttributes {
   canonicalTitle: string;
   titles: { en?: string; en_jp?: string; ja_jp?: string };
@@ -54,8 +50,6 @@ export interface KitsuManga {
   type: "manga";
   attributes: KitsuMangaAttributes;
 }
-
-// ─── Library Entries ─────────────────────────────────────────────────────────
 
 export type KitsuWatchStatus =
   | "current"

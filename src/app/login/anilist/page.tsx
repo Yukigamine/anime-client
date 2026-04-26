@@ -6,10 +6,8 @@ import { buildAniListAuthUrl } from "@/lib/anilist/auth";
 export const metadata: Metadata = { title: "AniList Login – Anime Client" };
 
 export default function AniListLoginPage() {
-  // Build the URL server-side so no env vars leak to the client
   const authUrl = buildAniListAuthUrl();
 
-  // If no client ID is configured, show an error rather than a broken redirect
   if (!process.env.ANILIST_CLIENT_ID) {
     return (
       <Container maxWidth="sm" sx={{ py: 8 }}>
@@ -25,6 +23,5 @@ export default function AniListLoginPage() {
     );
   }
 
-  // Redirect immediately via the server so the browser goes straight to AniList
   redirect(authUrl);
 }

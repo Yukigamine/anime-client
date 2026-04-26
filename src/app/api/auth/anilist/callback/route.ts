@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { exchangeAniListCode } from "@/lib/anilist/auth";
 
-// GET /api/auth/anilist/callback?code=...  –  exchange code, redirect home
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");

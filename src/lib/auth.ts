@@ -23,7 +23,6 @@ export interface TokenInfo {
   providerUserId?: string | null;
 }
 
-/** Persist token to DB and set httpOnly cookie. */
 export async function saveToken(
   provider: Provider,
   info: TokenInfo,
@@ -51,12 +50,10 @@ export async function saveToken(
   jar.set(COOKIE_NAMES[provider], info.accessToken, COOKIE_OPTS);
 }
 
-/** Retrieve a token — cookie first, then DB. */
 export async function getToken(provider: Provider): Promise<TokenInfo | null> {
   const jar = await cookies();
   const cookie = jar.get(COOKIE_NAMES[provider]);
   if (cookie?.value) {
-    // Quick path: cookie is set
     const record = await prisma.authToken.findUnique({ where: { provider } });
     return {
       accessToken: cookie.value,
@@ -71,9 +68,7 @@ export async function getToken(provider: Provider): Promise<TokenInfo | null> {
   const record = await prisma.authToken.findUnique({ where: { provider } });
   if (!record) return null;
 
-  // Re-hydrate the cookie
-  const jar2 = await cookies();
-  jar2.set(COOKIE_NAMES[provider], record.accessToken, COOKIE_OPTS);
+  jar.set(COOKIE_NAMES[provider], record.accessToken, COOKIE_OPTS);
 
   return {
     accessToken: record.accessToken,

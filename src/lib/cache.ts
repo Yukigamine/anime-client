@@ -30,6 +30,6 @@ export async function invalidateListCache(): Promise<void> {
       await kv.del(...keys);
     }
   } catch {
-    // Best-effort
+    // ignore
   }
 }

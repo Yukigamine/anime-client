@@ -48,7 +48,6 @@ export default async function LoginPage({
         </Box>
       )}
 
-      {/* Kitsu card */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Box
@@ -94,7 +93,6 @@ export default async function LoginPage({
         </CardContent>
       </Card>
 
-      {/* AniList card */}
       <Card>
         <CardContent>
           <Box

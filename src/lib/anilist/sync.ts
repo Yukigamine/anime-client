@@ -12,8 +12,6 @@ import type {
 
 const ANILIST_GRAPHQL = "https://graphql.anilist.co";
 
-// ─── GraphQL queries/mutations ────────────────────────────────────────────────
-
 const LIST_QUERY = `
 query GetMediaList($username: String, $type: MediaType, $page: Int) {
   Page(page: $page, perPage: 50) {
@@ -69,8 +67,6 @@ mutation UpdateEntry(
   ) { id }
 }`;
 
-// ─── HTTP helpers ─────────────────────────────────────────────────────────────
-
 async function gql<T>(
   query: string,
   variables: Record<string, unknown>,
@@ -98,8 +94,6 @@ async function gql<T>(
   }
   return json as T;
 }
-
-// ─── Mapping helpers ──────────────────────────────────────────────────────────
 
 function mapWatchStatus(s: AniListStatus): WatchStatus {
   switch (s) {
@@ -182,8 +176,6 @@ function reverseReadStatus(s: ReadStatus): string {
       return "DROPPED";
   }
 }
-
-// ─── Pull helpers ─────────────────────────────────────────────────────────────
 
 async function pullAnimeItem(item: AniListMediaList): Promise<void> {
   const { media } = item;
@@ -310,8 +302,6 @@ function buildMediaCommon(media: AniListMedia) {
   };
 }
 
-// ─── Public pull ──────────────────────────────────────────────────────────────
-
 export async function pullAniList(logId: string): Promise<void> {
   const tokenInfo = await getToken("ANILIST");
   const token = tokenInfo?.accessToken;
@@ -367,8 +357,6 @@ export async function pullAniList(logId: string): Promise<void> {
     },
   });
 }
-
-// ─── Public push ──────────────────────────────────────────────────────────────
 
 export async function pushAniList(logId: string): Promise<void> {
   const tokenInfo = await getToken("ANILIST");

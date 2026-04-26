@@ -12,8 +12,6 @@ import { prisma } from "./db";
 export type AnimeWithEntry = Anime & { listEntry: AnimeListEntry | null };
 export type MangaWithEntry = Manga & { listEntry: MangaListEntry | null };
 
-// ─── Anime list ───────────────────────────────────────────────────────────────
-
 export async function getAnimeList(
   status?: WatchStatus,
 ): Promise<AnimeWithEntry[]> {
@@ -50,8 +48,6 @@ export async function getAnimeListCounts(): Promise<Record<string, number>> {
   await setCachedList(cacheKey, counts);
   return counts;
 }
-
-// ─── Manga list ───────────────────────────────────────────────────────────────
 
 export async function getMangaList(
   status?: ReadStatus,

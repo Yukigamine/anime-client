@@ -4,7 +4,6 @@ const ANILIST_TOKEN_URL = "https://anilist.co/api/v2/oauth/token";
 const ANILIST_AUTH_URL = "https://anilist.co/api/v2/oauth/authorize";
 const ANILIST_GRAPHQL = "https://graphql.anilist.co";
 
-/** Build the AniList OAuth authorization URL to redirect the user to. */
 export function buildAniListAuthUrl(): string {
   const clientId = process.env.ANILIST_CLIENT_ID ?? "";
   const redirectUri =
@@ -20,7 +19,6 @@ export function buildAniListAuthUrl(): string {
   return `${ANILIST_AUTH_URL}?${params.toString()}`;
 }
 
-/** Exchange an authorization code for an access token and persist it. */
 export async function exchangeAniListCode(code: string): Promise<string> {
   const clientId = process.env.ANILIST_CLIENT_ID ?? "";
   const clientSecret = process.env.ANILIST_CLIENT_SECRET ?? "";
@@ -51,7 +49,6 @@ export async function exchangeAniListCode(code: string): Promise<string> {
     token_type: string;
   };
 
-  // Resolve the viewer username
   const viewerRes = await fetch(ANILIST_GRAPHQL, {
     method: "POST",
     headers: {

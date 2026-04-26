@@ -14,8 +14,6 @@ import type {
 
 const KITSU_API = "https://kitsu.io/api/edge";
 
-// ─── HTTP helpers ─────────────────────────────────────────────────────────────
-
 async function fetchJson<T>(url: string, token?: string): Promise<T> {
   const headers: Record<string, string> = {
     Accept: "application/vnd.api+json",
@@ -46,8 +44,6 @@ async function patchJson(
     throw new Error(`Kitsu PATCH ${res.status}: ${text}`);
   }
 }
-
-// ─── Mapping helpers ──────────────────────────────────────────────────────────
 
 function mapWatchStatus(s: KitsuWatchStatus): WatchStatus {
   switch (s) {
@@ -134,8 +130,6 @@ function reverseReadStatus(s: ReadStatus): KitsuWatchStatus {
   }
 }
 
-// ─── User lookup ──────────────────────────────────────────────────────────────
-
 async function getUserId(username: string, token?: string): Promise<string> {
   const filter = token
     ? "filter[self]=true"
@@ -148,8 +142,6 @@ async function getUserId(username: string, token?: string): Promise<string> {
   return data.data[0].id;
 }
 
-// ─── Pull: anime ──────────────────────────────────────────────────────────────
-
 async function pullAnimeEntry(
   entry: KitsuAnimeLibraryEntry,
   anime: KitsuAnime | null,
@@ -161,7 +153,6 @@ async function pullAnimeEntry(
     a?.titles?.en ?? a?.titles?.en_jp ?? a?.canonicalTitle ?? null;
   const coverImageUrl = a?.posterImage?.medium ?? a?.posterImage?.small ?? null;
 
-  // Upsert the canonical Anime record
   const animeRecord = await prisma.anime.upsert({
     where: { kitsuId: anime?.id ?? `kitsu-${entry.id}` },
     create: {
@@ -193,7 +184,6 @@ async function pullAnimeEntry(
     },
   });
 
-  // Upsert the list entry
   await prisma.animeListEntry.upsert({
     where: { animeId: animeRecord.id },
     create: {
@@ -227,8 +217,6 @@ async function pullAnimeEntry(
     },
   });
 }
-
-// ─── Pull: manga ──────────────────────────────────────────────────────────────
 
 async function pullMangaEntry(
   entry: KitsuMangaLibraryEntry,
@@ -308,8 +296,6 @@ async function pullMangaEntry(
   });
 }
 
-// ─── Public pull ──────────────────────────────────────────────────────────────
-
 export async function pullKitsu(logId: string): Promise<void> {
   const tokenInfo = await getToken("KITSU");
   const token = tokenInfo?.accessToken;
@@ -321,7 +307,6 @@ export async function pullKitsu(logId: string): Promise<void> {
 
   const baseParams = `filter[userId]=${userId}&include={kind}&page[limit]=500`;
 
-  // ── anime ──
   let animeUrl: string | null =
     `${KITSU_API}/library-entries?${baseParams.replace("{kind}", "anime")}` +
     `&filter[kind]=anime` +
@@ -351,7 +336,6 @@ export async function pullKitsu(logId: string): Promise<void> {
     animeUrl = page.links.next ?? null;
   }
 
-  // ── manga ──
   let mangaUrl: string | null =
     `${KITSU_API}/library-entries?filter[userId]=${userId}&filter[kind]=manga` +
     `&include=manga` +
@@ -393,8 +377,6 @@ export async function pullKitsu(logId: string): Promise<void> {
   });
 }
 
-// ─── Push ─────────────────────────────────────────────────────────────────────
-
 export async function pushKitsu(logId: string): Promise<void> {
   const tokenInfo = await getToken("KITSU");
   if (!tokenInfo?.accessToken)
@@ -405,7 +387,6 @@ export async function pushKitsu(logId: string): Promise<void> {
   let animeSynced = 0;
   let mangaSynced = 0;
 
-  // Push anime list entries that have a Kitsu entry ID
   const animeEntries = await prisma.animeListEntry.findMany({
     where: { kitsuEntryId: { not: null } },
   });
@@ -439,7 +420,6 @@ export async function pushKitsu(logId: string): Promise<void> {
     }
   }
 
-  // Push manga list entries
   const mangaEntries = await prisma.mangaListEntry.findMany({
     where: { kitsuEntryId: { not: null } },
   });

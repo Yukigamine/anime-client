@@ -10,7 +10,6 @@ export interface KitsuTokenResponse {
   token_type: string;
 }
 
-/** Password-grant OAuth – returns the access token string on success. */
 export async function loginKitsu(
   username: string,
   password: string,
@@ -43,7 +42,6 @@ export async function loginKitsu(
 
   const data = (await res.json()) as KitsuTokenResponse;
 
-  // Resolve the Kitsu user ID and username
   const userRes = await fetch(`${KITSU_API}/users?filter[self]=true`, {
     headers: {
       Accept: "application/vnd.api+json",
@@ -73,7 +71,6 @@ export async function loginKitsu(
   return data.access_token;
 }
 
-/** Refresh an expiring Kitsu access token. */
 export async function refreshKitsuToken(refreshToken: string): Promise<string> {
   const clientId =
     process.env.KITSU_CLIENT_ID ??
