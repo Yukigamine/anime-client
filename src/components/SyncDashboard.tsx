@@ -2,7 +2,7 @@
 
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
-import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import {
   Alert,
   Box,
@@ -99,7 +99,7 @@ export default function SyncDashboard() {
         {(["KITSU", "ANILIST"] as const).map((provider) => (
           <Paper key={provider} sx={{ p: 3 }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-              <Typography variant="h6" fontWeight={600}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
                 {PROVIDER_LABELS[provider]}
               </Typography>
               {data?.auth[provider].loggedIn ? (
@@ -122,7 +122,7 @@ export default function SyncDashboard() {
               )}
             </Box>
 
-            <Stack direction="row" spacing={2} flexWrap="wrap">
+            <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap" }}>
               {(["PULL", "PUSH"] as const).map((dir) => {
                 const log = lastLog(provider, dir);
                 const busy = isRunning(provider, dir);
@@ -173,7 +173,7 @@ export default function SyncDashboard() {
       {/* Recent sync history */}
       {data && data.logs.length > 0 && (
         <Box sx={{ mt: 4 }}>
-          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+          <Typography variant="subtitle1" gutterBottom sx={{ fontWeight: 600 }}>
             Recent runs
           </Typography>
           <Divider sx={{ mb: 2 }} />

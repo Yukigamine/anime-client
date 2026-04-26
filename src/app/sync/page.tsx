@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: "Sync – Anime Client" };
 export default function SyncPage() {
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Typography variant="h4" fontWeight={700} gutterBottom>
+      <Typography variant="h4" gutterBottom sx={{ fontWeight: 700 }}>
         Sync
       </Typography>
       <Typography color="text.secondary" sx={{ mb: 4 }}>

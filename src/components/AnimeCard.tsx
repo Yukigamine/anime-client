@@ -98,9 +98,8 @@ export default function AnimeCard({ item }: { item: AnimeWithEntry }) {
         <Tooltip title={title} placement="top-start">
           <Typography
             variant="subtitle1"
-            fontWeight={600}
             noWrap
-            sx={{ lineHeight: 1.3 }}
+            sx={{ fontWeight: 600, lineHeight: 1.3 }}
           >
             {title}
           </Typography>

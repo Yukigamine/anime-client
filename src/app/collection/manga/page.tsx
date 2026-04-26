@@ -54,7 +54,7 @@ export default async function MangaCollectionPage() {
         }}
       >
         <Box>
-          <Typography variant="h4" fontWeight={700}>
+          <Typography variant="h4" sx={{ fontWeight: 700 }}>
             Manga Collection
           </Typography>
           <Typography variant="body2" color="text.secondary">
@@ -72,11 +72,13 @@ export default async function MangaCollectionPage() {
       </Box>
 
       {items.length === 0 ? (
-        <Stack spacing={2} alignItems="center" sx={{ py: 10 }}>
+        <Stack spacing={2} sx={{ py: 10, alignItems: "center" }}>
           <Typography variant="h5" color="text.secondary">
             Your collection is empty
           </Typography>
-          <Typography color="text.disabled" textAlign="center" maxWidth={400}>
+          <Typography
+            sx={{ color: "text.disabled", textAlign: "center", maxWidth: 400 }}
+          >
             Track your physical manga volumes here. Adding and editing items
             will be available in a future update.
           </Typography>

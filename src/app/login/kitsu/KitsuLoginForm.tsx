@@ -50,7 +50,7 @@ export default function KitsuLoginForm() {
 
   return (
     <Container maxWidth="xs" sx={{ py: 8 }}>
-      <Typography variant="h5" fontWeight={700} gutterBottom>
+      <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
         Sign in with Kitsu
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
@@ -95,7 +95,7 @@ export default function KitsuLoginForm() {
         >
           {loading ? <CircularProgress size={22} color="inherit" /> : "Sign in"}
         </Button>
-        <Link href="/login" underline="hover" textAlign="center">
+        <Link href="/login" underline="hover" sx={{ textAlign: "center" }}>
           ← Back to accounts
         </Link>
       </Box>

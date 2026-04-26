@@ -26,7 +26,7 @@ export default async function LoginPage({
 
   return (
     <Container maxWidth="sm" sx={{ py: 8 }}>
-      <Typography variant="h4" fontWeight={700} gutterBottom>
+      <Typography variant="h4" gutterBottom sx={{ fontWeight: 700 }}>
         Connect your accounts
       </Typography>
       <Typography color="text.secondary" sx={{ mb: 4 }}>
@@ -55,7 +55,7 @@ export default async function LoginPage({
             sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.5 }}
           >
             <KeyIcon color="primary" />
-            <Typography variant="h6" fontWeight={600}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
               Kitsu
             </Typography>
             {auth.KITSU.loggedIn && (
@@ -101,7 +101,7 @@ export default async function LoginPage({
             sx={{ display: "flex", alignItems: "center", gap: 1.5, mb: 1.5 }}
           >
             <OpenInNewIcon color="secondary" />
-            <Typography variant="h6" fontWeight={600}>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
               AniList
             </Typography>
             {auth.ANILIST.loggedIn && (

@@ -6,6 +6,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import LiveTvIcon from "@mui/icons-material/LiveTv";
 import MenuIcon from "@mui/icons-material/Menu";
 import MenuBookIcon from "@mui/icons-material/MenuBook";
+import PersonIcon from "@mui/icons-material/Person";
 import SyncIcon from "@mui/icons-material/Sync";
 import VideoLibraryIcon from "@mui/icons-material/VideoLibrary";
 import {
@@ -29,6 +30,7 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import ColorSchemeToggle from "@/components/ColorSchemeToggle";
 
 const NAV_ITEMS = [
   {
@@ -40,6 +42,11 @@ const NAV_ITEMS = [
     label: "Manga List",
     href: "/list/manga",
     icon: <MenuBookIcon fontSize="small" />,
+  },
+  {
+    label: "About",
+    href: "/me",
+    icon: <PersonIcon fontSize="small" />,
   },
 ] as const;
 
@@ -79,10 +86,14 @@ export default function NavBar() {
         <Toolbar>
           <Typography
             variant="h6"
-            fontWeight={700}
             component={Link}
             href="/list/anime"
-            sx={{ textDecoration: "none", color: "inherit", mr: 3 }}
+            sx={{
+              fontWeight: 700,
+              textDecoration: "none",
+              color: "inherit",
+              mr: 3,
+            }}
           >
             Anime Client
           </Typography>
@@ -90,6 +101,7 @@ export default function NavBar() {
           {isMobile ? (
             <>
               <Box sx={{ flex: 1 }} />
+              <ColorSchemeToggle />
               <IconButton color="inherit" onClick={() => setDrawerOpen(true)}>
                 <MenuIcon />
               </IconButton>
@@ -162,6 +174,8 @@ export default function NavBar() {
                 Sync
               </Button>
 
+              <ColorSchemeToggle />
+
               <IconButton
                 component={Link}
                 href="/login"
@@ -180,7 +194,7 @@ export default function NavBar() {
         anchor="right"
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        PaperProps={{ sx: { width: 260 } }}
+        slotProps={{ paper: { sx: { width: 260 } } }}
       >
         <Toolbar />
         <List dense>
@@ -204,7 +218,7 @@ export default function NavBar() {
             </ListItemIcon>
             <ListItemText
               primary="Collection"
-              primaryTypographyProps={{ fontWeight: 600, fontSize: 13 }}
+              slotProps={{ primary: { sx: { fontWeight: 600, fontSize: 13 } } }}
             />
           </ListItemButton>
 

@@ -52,7 +52,7 @@ export async function loginKitsu(
   });
   const userData = userRes.ok
     ? ((await userRes.json()) as {
-        data: { id: string; attributes: { name: string } }[];
+        data: { id: string; attributes: { name: string; slug: string } }[];
       })
     : null;
 
@@ -63,7 +63,11 @@ export async function loginKitsu(
     refreshToken: data.refresh_token,
     expiresAt,
     providerUserId: userData?.data[0]?.id ?? null,
-    username: userData?.data[0]?.attributes?.name ?? username,
+    // slug is the identifier used in Kitsu URLs and GraphQL queries
+    username:
+      userData?.data[0]?.attributes?.slug ??
+      userData?.data[0]?.attributes?.name ??
+      username,
   });
 
   return data.access_token;

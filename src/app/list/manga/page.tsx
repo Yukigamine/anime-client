@@ -14,7 +14,7 @@ export default async function MangaListPage() {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Typography variant="h4" fontWeight={700} sx={{ mb: 4 }}>
+      <Typography variant="h4" sx={{ fontWeight: 700, mb: 4 }}>
         Manga List
       </Typography>
 
