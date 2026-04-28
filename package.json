@@ -8,16 +8,18 @@
     "build": "next build --turbopack",
     "start": "next start",
     "lint": "biome lint --write",
-    "lint-check": "biome check",
+    "lint-check": "biome check && knip",
     "lint-staged": "lint-staged",
     "format": "biome format --write",
-    "check": "biome check && knip",
+    "check": "biome check --write",
     "knip": "knip",
     "knip:deps": "knip --dependencies",
     "prepare": "prisma generate && husky",
     "deploy": "prisma generate && prisma migrate deploy && next build",
     "db-edit": "prisma studio",
-    "db-init": "prisma migrate reset"
+    "db-init": "prisma migrate reset",
+    "zeus:kitsu": "tsx scripts/zeus-gen.ts https://kitsu.app/api/graphql src/lib/zeus/kitsu --graphql=graphql/kitsu.schema.graphql",
+    "zeus:anilist": "tsx scripts/zeus-gen.ts https://graphql.anilist.co src/lib/zeus/anilist --graphql=graphql/anilist.schema.graphql"
   },
   "dependencies": {
     "@emotion/cache": "11.14.0",
@@ -31,24 +33,38 @@
     "@prisma/client": "7.8.0",
     "@vercel/kv": "3.0.0",
     "next": "16.2.4",
+    "notistack": "^3.0.2",
     "prisma": "7.8.0",
+    "puppeteer": "^24.42.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "react": "19.2.5",
-    "react-dom": "19.2.5"
+    "react-dom": "19.2.5",
+    "shallow-clone": "^3.0.1",
+    "swr": "^2.4.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.13",
     "@commitlint/cli": "20.5.2",
     "@commitlint/config-conventional": "20.5.0",
     "@commitlint/types": "20.5.0",
+    "@prisma/adapter-pg": "7.8.0",
     "@types/node": "25.6.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "dotenv": "17.4.2",
+    "graphql-zeus": "^7.2.1",
     "husky": "9.1.7",
     "knip": "6.7.0",
     "lint-staged": "16.4.0",
+    "server-only": "^0.0.1",
     "tsx": "4.21.0",
     "typescript": "6.0.3"
   },
-  "packageManager": "pnpm@10.29.1"
+  "packageManager": "pnpm@10.33.2",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "puppeteer"
+    ]
+  }
 }

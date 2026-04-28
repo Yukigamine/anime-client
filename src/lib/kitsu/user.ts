@@ -1,120 +1,16 @@
-const KITSU_GRAPHQL = "https://kitsu.app/api/graphql";
+import "server-only";
+import { kitsuThunder } from "./thunder";
+import type { KitsuFavoriteItem, KitsuUserProfile } from "./user-types";
 
-const USER_DETAILS_QUERY = `
-query ($slug: String!) {
-  findProfileBySlug(slug: $slug) {
-    about
-    avatarImage {
-      original { url }
-    }
-    bannerImage {
-      original { url }
-    }
-    birthday
-    createdAt
-    id
-    location
-    gender
-    name
-    slug
-    siteLinks(first: 20) {
-      nodes { url }
-    }
-    favorites(first: 100) {
-      nodes {
-        id
-        item {
-          __typename
-          ...on Anime {
-            id
-            slug
-            posterImage { original { url } }
-            titles { canonical }
-          }
-          ...on Manga {
-            id
-            slug
-            posterImage { original { url } }
-            titles { canonical }
-          }
-          ...on Character {
-            id
-            slug
-            image { original { url } }
-            names { canonical }
-          }
-          ...on Person {
-            id
-            slug
-            image { original { url } }
-            names { canonical }
-          }
-        }
-      }
-    }
-    stats {
-      animeAmountConsumed {
-        media
-        time
-        units
-      }
-      mangaAmountConsumed {
-        media
-        units
-      }
-    }
-    waifu {
-      id
-      slug
-      image { original { url } }
-      names { canonical }
-    }
-    waifuOrHusbando
-  }
-}
-`;
+export {
+  ageFromBirthday,
+  daysAgo,
+  formatProfileDate,
+  formatWatchTime,
+  type KitsuFavoriteItem,
+  type KitsuUserProfile,
+} from "./user-types";
 
-export interface KitsuFavoriteItem {
-  id: string;
-  slug: string;
-  name: string;
-  imageUrl: string | null;
-  type: "anime" | "manga" | "character" | "person";
-}
-
-export interface KitsuUserProfile {
-  slug: string;
-  name: string;
-  about: string | null;
-  avatarUrl: string | null;
-  bannerUrl: string | null;
-  birthday: string | null;
-  createdAt: string;
-  gender: string | null;
-  location: string | null;
-  website: string | null;
-  waifu: {
-    slug: string;
-    name: string;
-    imageUrl: string | null;
-    label: string;
-  } | null;
-  stats: {
-    animeTimeSecs: number | null;
-    animeSeries: number | null;
-    animeEpisodes: number | null;
-    mangaSeries: number | null;
-    mangaChapters: number | null;
-  };
-  favorites: {
-    anime: KitsuFavoriteItem[];
-    manga: KitsuFavoriteItem[];
-    character: KitsuFavoriteItem[];
-    person: KitsuFavoriteItem[];
-  };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function extractImageUrl(item: any, isMedia: boolean): string | null {
   return isMedia
     ? (item.posterImage?.original?.url ?? null)
@@ -124,24 +20,71 @@ function extractImageUrl(item: any, isMedia: boolean): string | null {
 export async function getKitsuUserProfile(
   slug: string,
 ): Promise<KitsuUserProfile | null> {
-  const res = await fetch(KITSU_GRAPHQL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({ query: USER_DETAILS_QUERY, variables: { slug } }),
-    next: { revalidate: 300 },
+  const result = await kitsuThunder("query")({
+    findProfileBySlug: [
+      { slug },
+      {
+        about: true,
+        avatarImage: { original: { url: true } },
+        bannerImage: { original: { url: true } },
+        birthday: true,
+        createdAt: true,
+        id: true,
+        location: true,
+        gender: true,
+        name: true,
+        slug: true,
+        siteLinks: [{ first: 20 }, { nodes: { url: true } }],
+        favorites: [
+          { first: 100 },
+          {
+            nodes: {
+              id: true,
+              item: {
+                __typename: true,
+                "...on Anime": {
+                  id: true,
+                  slug: true,
+                  posterImage: { original: { url: true } },
+                  titles: { canonical: true },
+                },
+                "...on Manga": {
+                  id: true,
+                  slug: true,
+                  posterImage: { original: { url: true } },
+                  titles: { canonical: true },
+                },
+                "...on Character": {
+                  id: true,
+                  slug: true,
+                  image: { original: { url: true } },
+                  names: { canonical: true },
+                },
+                "...on Person": {
+                  id: true,
+                  slug: true,
+                  image: { original: { url: true } },
+                  names: { canonical: true },
+                },
+              },
+            },
+          },
+        ],
+        stats: {
+          animeAmountConsumed: { media: true, time: true, units: true },
+          mangaAmountConsumed: { media: true, units: true },
+        },
+        waifu: {
+          id: true,
+          slug: true,
+          image: { original: { url: true } },
+          names: { canonical: true },
+        },
+        waifuOrHusbando: true,
+      },
+    ],
   });
-
-  if (!res.ok) throw new Error(`Kitsu GraphQL ${res.status}`);
-
-  const json = (await res.json()) as {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    data: { findProfileBySlug: any | null };
-  };
-
-  const base = json.data?.findProfileBySlug;
+  const base = (result as any)?.findProfileBySlug;
   if (!base) return null;
 
   const favorites: KitsuUserProfile["favorites"] = {
@@ -208,44 +151,4 @@ export async function getKitsuUserProfile(
     },
     favorites,
   };
-}
-
-export function formatWatchTime(seconds: number): string {
-  if (seconds < 60) return `${seconds} sec`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} min`;
-  const hours = Math.floor(seconds / 3600);
-  if (hours < 24) return `${hours} hr`;
-  const days = Math.floor(hours / 24);
-  if (days < 365) return `${days} day${days !== 1 ? "s" : ""}`;
-  const years = Math.floor(days / 365);
-  const rem = days % 365;
-  return rem > 0
-    ? `${years} yr${years !== 1 ? "s" : ""} ${rem} day${rem !== 1 ? "s" : ""}`
-    : `${years} yr${years !== 1 ? "s" : ""}`;
-}
-
-export function formatProfileDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-export function daysAgo(iso: string): number {
-  return Math.floor(
-    (Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24),
-  );
-}
-
-export function ageFromBirthday(iso: string): number {
-  const bd = new Date(iso);
-  const now = new Date();
-  let age = now.getFullYear() - bd.getFullYear();
-  if (
-    now.getMonth() < bd.getMonth() ||
-    (now.getMonth() === bd.getMonth() && now.getDate() < bd.getDate())
-  )
-    age--;
-  return age;
 }

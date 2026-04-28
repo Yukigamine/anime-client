@@ -1,6 +1,7 @@
+import "server-only";
 import { cookies } from "next/headers";
 import type { Provider } from "@/generated/prisma/client";
-import { prisma } from "./db";
+import prisma from "./prisma";
 
 const COOKIE_OPTS = {
   httpOnly: true,

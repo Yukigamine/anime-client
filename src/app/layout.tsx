@@ -1,10 +1,8 @@
-import { CssBaseline, ThemeProvider } from "@mui/material";
 import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
-import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import NavBar from "@/components/NavBar";
-import theme from "@/lib/theme";
+import Providers from "@/components/Providers";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({
@@ -27,14 +25,11 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable}`}
     >
       <body>
-        <AppRouterCacheProvider>
-          <InitColorSchemeScript attribute="class" defaultMode="system" />
-          <ThemeProvider theme={theme} defaultMode="system">
-            <CssBaseline />
-            <NavBar />
-            {children}
-          </ThemeProvider>
-        </AppRouterCacheProvider>
+        <InitColorSchemeScript attribute="class" defaultMode="system" />
+        <Providers>
+          <NavBar />
+          {children}
+        </Providers>
       </body>
     </html>
   );

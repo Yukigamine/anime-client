@@ -113,6 +113,7 @@ export default function NavBar() {
                   key={href}
                   component={Link}
                   href={href}
+                  prefetch={false}
                   startIcon={icon}
                   color={isActive(href) ? "primary" : "inherit"}
                   sx={{
@@ -149,6 +150,7 @@ export default function NavBar() {
                     key={href}
                     component={Link}
                     href={href}
+                    prefetch={false}
                     onClick={() => setCollectionAnchor(null)}
                     selected={isActive(href)}
                   >
@@ -163,6 +165,7 @@ export default function NavBar() {
               <Button
                 component={Link}
                 href="/sync"
+                prefetch={false}
                 startIcon={<SyncIcon fontSize="small" />}
                 color={isActive("/sync") ? "primary" : "inherit"}
                 sx={{
@@ -178,8 +181,9 @@ export default function NavBar() {
 
               <IconButton
                 component={Link}
-                href="/login"
-                color={isActive("/login") ? "primary" : "inherit"}
+                href="/link"
+                prefetch={false}
+                color={isActive("/link") ? "primary" : "inherit"}
                 title="Accounts"
               >
                 <AccountCircleIcon />
@@ -203,6 +207,7 @@ export default function NavBar() {
               key={href}
               component={Link}
               href={href}
+              prefetch={false}
               selected={isActive(href)}
               onClick={() => setDrawerOpen(false)}
             >
@@ -227,6 +232,7 @@ export default function NavBar() {
               key={href}
               component={Link}
               href={href}
+              prefetch={false}
               selected={isActive(href)}
               onClick={() => setDrawerOpen(false)}
               sx={{ pl: 4 }}
@@ -241,6 +247,7 @@ export default function NavBar() {
           <ListItemButton
             component={Link}
             href="/sync"
+            prefetch={false}
             selected={isActive("/sync")}
             onClick={() => setDrawerOpen(false)}
           >
@@ -252,8 +259,9 @@ export default function NavBar() {
 
           <ListItemButton
             component={Link}
-            href="/login"
-            selected={isActive("/login")}
+            href="/link"
+            prefetch={false}
+            selected={isActive("/link")}
             onClick={() => setDrawerOpen(false)}
           >
             <ListItemIcon>

@@ -15,7 +15,7 @@ import {
   Typography,
 } from "@mui/material";
 import type { Metadata } from "next";
-import { prisma } from "@/lib/db";
+import prisma from "@/lib/prisma";
 
 export const metadata: Metadata = { title: "Anime Collection – Anime Client" };
 export const dynamic = "force-dynamic";

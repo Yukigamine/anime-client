@@ -2,9 +2,9 @@
 
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlineOutlined";
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -13,29 +13,29 @@ import {
   Divider,
   Paper,
   Stack,
+  Tooltip,
   Typography,
 } from "@mui/material";
+import { enqueueSnackbar } from "notistack";
 import { useCallback, useEffect, useState } from "react";
 import type { SyncLog } from "@/generated/prisma/client";
-
-type AuthStatus = Record<
-  "KITSU" | "ANILIST",
-  { loggedIn: boolean; username: string | null }
->;
-type StatusPayload = { logs: SyncLog[]; auth: AuthStatus };
+import {
+  getSyncStatusAction,
+  type SyncStatusPayload,
+  triggerSyncAction,
+} from "@/lib/actions";
 
 const PROVIDER_LABELS = { KITSU: "Kitsu", ANILIST: "AniList" } as const;
 
 export default function SyncDashboard() {
-  const [data, setData] = useState<StatusPayload | null>(null);
+  const [data, setData] = useState<SyncStatusPayload | null>(null);
   const [running, setRunning] = useState<string | null>(null); // "KITSU-PULL" etc.
-  const [actionError, setActionError] = useState<string | null>(null);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [expandedRecent, setExpandedRecent] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/sync/status");
-      if (res.ok) setData(await res.json());
+      setData(await getSyncStatusAction());
     } catch {
       // ignore transient errors
     }
@@ -56,23 +56,11 @@ export default function SyncDashboard() {
     provider: "KITSU" | "ANILIST",
     direction: "PULL" | "PUSH",
   ) {
-    const key = `${provider}-${direction}`;
-    setRunning(key);
-    setActionError(null);
-
-    try {
-      const res = await fetch(
-        `/api/sync/${provider.toLowerCase()}?direction=${direction.toLowerCase()}`,
-        { method: "POST" },
-      );
-      const body = await res.json();
-      if (!res.ok) setActionError(body.error ?? "Sync failed");
-    } catch {
-      setActionError("Network error while starting sync");
-    } finally {
-      setRunning(null);
-      await fetchStatus();
-    }
+    setRunning(`${provider}-${direction}`);
+    const result = await triggerSyncAction(provider, direction);
+    if (!result.ok) enqueueSnackbar(result.error, { variant: "error" });
+    setRunning(null);
+    await fetchStatus();
   }
 
   const isRunning = (provider: string, direction: string) =>
@@ -85,16 +73,6 @@ export default function SyncDashboard() {
 
   return (
     <Box>
-      {actionError && (
-        <Alert
-          severity="error"
-          sx={{ mb: 3 }}
-          onClose={() => setActionError(null)}
-        >
-          {actionError}
-        </Alert>
-      )}
-
       <Stack spacing={3}>
         {(["KITSU", "ANILIST"] as const).map((provider) => (
           <Paper key={provider} sx={{ p: 3 }}>
@@ -116,7 +94,7 @@ export default function SyncDashboard() {
                   size="small"
                   variant="outlined"
                   component="a"
-                  href="/login"
+                  href="/link"
                   clickable
                 />
               )}
@@ -126,32 +104,44 @@ export default function SyncDashboard() {
               {(["PULL", "PUSH"] as const).map((dir) => {
                 const log = lastLog(provider, dir);
                 const busy = isRunning(provider, dir);
-                const canPush = dir === "PUSH" && data?.auth[provider].loggedIn;
-                const canPull = dir === "PULL";
-                const disabled = busy || (!canPull && !canPush);
+                const isConnected = data?.auth[provider].loggedIn;
+                const disabled = busy || !isConnected;
+
+                const button = (
+                  <Button
+                    variant={dir === "PULL" ? "contained" : "outlined"}
+                    startIcon={
+                      busy ? (
+                        <CircularProgress size={16} color="inherit" />
+                      ) : dir === "PULL" ? (
+                        <CloudDownloadIcon />
+                      ) : (
+                        <CloudUploadIcon />
+                      )
+                    }
+                    disabled={disabled}
+                    onClick={() => triggerSync(provider, dir)}
+                    sx={{ textTransform: "none", mb: 1.5 }}
+                    fullWidth
+                  >
+                    {busy
+                      ? "Running…"
+                      : `${dir === "PULL" ? "Pull from" : "Push to"} ${PROVIDER_LABELS[provider]}`}
+                  </Button>
+                );
 
                 return (
                   <Box key={dir} sx={{ flex: "1 1 240px", minWidth: 0 }}>
-                    <Button
-                      variant={dir === "PULL" ? "contained" : "outlined"}
-                      startIcon={
-                        busy ? (
-                          <CircularProgress size={16} color="inherit" />
-                        ) : dir === "PULL" ? (
-                          <CloudDownloadIcon />
-                        ) : (
-                          <CloudUploadIcon />
-                        )
+                    <Tooltip
+                      title={
+                        disabled && !busy
+                          ? "Connect your account to enable this action"
+                          : ""
                       }
-                      disabled={disabled}
-                      onClick={() => triggerSync(provider, dir)}
-                      sx={{ textTransform: "none", mb: 1.5 }}
-                      fullWidth
+                      disableInteractive
                     >
-                      {busy
-                        ? "Running…"
-                        : `${dir === "PULL" ? "Pull from" : "Push to"} ${PROVIDER_LABELS[provider]}`}
-                    </Button>
+                      <span>{button}</span>
+                    </Tooltip>
 
                     {log && (
                       <LastRunSummary
@@ -182,9 +172,9 @@ export default function SyncDashboard() {
               <LogRow
                 key={log.id}
                 log={log}
-                expanded={expandedLog === log.id}
+                expanded={expandedRecent === log.id}
                 onToggle={() =>
-                  setExpandedLog(expandedLog === log.id ? null : log.id)
+                  setExpandedRecent(expandedRecent === log.id ? null : log.id)
                 }
               />
             ))}
@@ -198,7 +188,87 @@ export default function SyncDashboard() {
 function statusColor(status: string) {
   if (status === "COMPLETED") return "success";
   if (status === "FAILED") return "error";
+  if (status === "CANCELLED") return "default";
   return "warning";
+}
+
+function LogDetails({
+  errors,
+  deletions,
+  expanded,
+  onToggle,
+  compact,
+}: {
+  errors: string[];
+  deletions: string[];
+  expanded: boolean;
+  onToggle: () => void;
+  compact?: boolean;
+}) {
+  const hasErrors = errors.length > 0;
+  const hasDeletions = deletions.length > 0;
+  if (!hasErrors && !hasDeletions) return null;
+
+  return (
+    <>
+      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+        {hasErrors && (
+          <Button
+            size="small"
+            color="error"
+            startIcon={<ErrorOutlineIcon />}
+            onClick={onToggle}
+            sx={{
+              textTransform: "none",
+              p: 0,
+              ...(compact ? { ml: 1.5 } : { alignSelf: "flex-start" }),
+            }}
+          >
+            {errors.length} error{errors.length > 1 ? "s" : ""}
+          </Button>
+        )}
+        {hasDeletions && (
+          <Button
+            size="small"
+            color="warning"
+            startIcon={<DeleteOutlineIcon />}
+            onClick={onToggle}
+            sx={{
+              textTransform: "none",
+              p: 0,
+              ...(compact ? {} : { alignSelf: "flex-start" }),
+            }}
+          >
+            {deletions.length} deleted
+          </Button>
+        )}
+      </Box>
+      <Collapse in={expanded}>
+        {hasErrors && (
+          <Box
+            component="ul"
+            sx={{ m: 0, pl: 2, mt: 0.5, color: "error.main", fontSize: 11 }}
+          >
+            {errors.map((e, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: static list
+              <li key={i}>{e}</li>
+            ))}
+          </Box>
+        )}
+        {hasDeletions && (
+          <Box
+            component="ul"
+            sx={{ m: 0, pl: 2, mt: 0.5, color: "warning.main", fontSize: 11 }}
+          >
+            {deletions.map((d, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: static list
+              <li key={i}>Deleted {d}</li>
+            ))}
+          </Box>
+        )}
+      </Collapse>
+    </>
+  );
 }
 
 function LastRunSummary({
@@ -211,6 +281,7 @@ function LastRunSummary({
   onToggle: () => void;
 }) {
   const errors = (log.errors as string[]) ?? [];
+  const deletions = (log.deletions as string[]) ?? [];
 
   return (
     <Box sx={{ fontSize: 12 }}>
@@ -227,31 +298,19 @@ function LastRunSummary({
       </Box>
       {log.status !== "RUNNING" && (
         <Typography variant="caption" color="text.secondary">
-          {log.animeSynced} anime · {log.mangaSynced} manga
+          {log.animeSynced} anime
+          {log.animeChanged ? ` (${log.animeChanged} changed)` : ""} ·{" "}
+          {log.mangaSynced} manga
+          {log.mangaChanged ? ` (${log.mangaChanged} changed)` : ""}
         </Typography>
       )}
-      {errors.length > 0 && (
-        <Button
-          size="small"
-          color="error"
-          startIcon={<ErrorOutlineIcon />}
-          onClick={onToggle}
-          sx={{ textTransform: "none", p: 0, mt: 0.5 }}
-        >
-          {errors.length} error{errors.length > 1 ? "s" : ""}
-        </Button>
-      )}
-      <Collapse in={expanded}>
-        <Box
-          component="ul"
-          sx={{ m: 0, pl: 2, mt: 0.5, color: "error.main", fontSize: 11 }}
-        >
-          {errors.map((e, i) => (
-            // biome-ignore lint/suspicious/noArrayIndexKey: static list
-            <li key={i}>{e}</li>
-          ))}
-        </Box>
-      </Collapse>
+      <LogDetails
+        errors={errors}
+        deletions={deletions}
+        expanded={expanded}
+        onToggle={onToggle}
+        compact
+      />
     </Box>
   );
 }
@@ -266,6 +325,7 @@ function LogRow({
   onToggle: () => void;
 }) {
   const errors = (log.errors as string[]) ?? [];
+  const deletions = (log.deletions as string[]) ?? [];
 
   return (
     <Paper
@@ -306,32 +366,17 @@ function LogRow({
         </Typography>
       </Box>
       <Typography variant="caption" color="text.secondary">
-        {log.animeSynced} anime · {log.mangaSynced} manga
+        {log.animeSynced} anime
+        {log.animeChanged ? ` (${log.animeChanged} changed)` : ""} ·{" "}
+        {log.mangaSynced} manga
+        {log.mangaChanged ? ` (${log.mangaChanged} changed)` : ""}
       </Typography>
-      {errors.length > 0 && (
-        <>
-          <Button
-            size="small"
-            color="error"
-            startIcon={<ErrorOutlineIcon />}
-            onClick={onToggle}
-            sx={{ textTransform: "none", p: 0, alignSelf: "flex-start" }}
-          >
-            {errors.length} error{errors.length > 1 ? "s" : ""}
-          </Button>
-          <Collapse in={expanded}>
-            <Box
-              component="ul"
-              sx={{ m: 0, pl: 2, color: "error.main", fontSize: 11 }}
-            >
-              {errors.map((e, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: static list
-                <li key={i}>{e}</li>
-              ))}
-            </Box>
-          </Collapse>
-        </>
-      )}
+      <LogDetails
+        errors={errors}
+        deletions={deletions}
+        expanded={expanded}
+        onToggle={onToggle}
+      />
     </Paper>
   );
 }

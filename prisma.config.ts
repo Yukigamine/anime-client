@@ -26,6 +26,6 @@ export default defineConfig({
     seed: "tsx --conditions=react-server ./prisma/seed.ts",
   },
   datasource: {
-    url: process.env.POSTGRES_URL_NON_SPOOLING,
+    url: process.env.POSTGRES_URL_NON_POOLING,
   },
 });

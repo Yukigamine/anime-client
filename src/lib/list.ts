@@ -1,3 +1,4 @@
+import "server-only";
 import type {
   Anime,
   AnimeListEntry,
@@ -7,7 +8,7 @@ import type {
   WatchStatus,
 } from "@/generated/prisma/client";
 import { getCachedList, LIST_CACHE_KEY, setCachedList } from "./cache";
-import { prisma } from "./db";
+import prisma from "./prisma";
 
 export type AnimeWithEntry = Anime & { listEntry: AnimeListEntry | null };
 export type MangaWithEntry = Manga & { listEntry: MangaListEntry | null };

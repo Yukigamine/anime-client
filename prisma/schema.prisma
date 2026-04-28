@@ -33,12 +33,6 @@ enum ShowStatus {
   UNKNOWN
 }
 
-enum SyncSource {
-  KITSU
-  ANILIST
-  MANUAL
-}
-
 enum Provider {
   KITSU
   ANILIST
@@ -48,6 +42,7 @@ enum SyncStatus {
   RUNNING
   COMPLETED
   FAILED
+  CANCELLED
 }
 
 enum SyncDirection {
@@ -96,7 +91,10 @@ model SyncLog {
   status        SyncStatus    @default(RUNNING)
   animeSynced   Int           @default(0)
   mangaSynced   Int           @default(0)
+  animeChanged  Int           @default(0)
+  mangaChanged  Int           @default(0)
   errors        Json          @default("[]")
+  deletions     Json          @default("[]")
   startedAt     DateTime      @default(now())
   finishedAt    DateTime?
 }
@@ -147,12 +145,8 @@ model AnimeListEntry {
   startedAt   DateTime?
   completedAt DateTime?
 
-  syncSource      SyncSource @default(MANUAL)
-  kitsuSyncedAt   DateTime?
-  anilistSyncedAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime?
 }
 
 model AnimeCollectionItem {
@@ -218,12 +212,8 @@ model MangaListEntry {
   startedAt   DateTime?
   completedAt DateTime?
 
-  syncSource      SyncSource @default(MANUAL)
-  kitsuSyncedAt   DateTime?
-  anilistSyncedAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime?
 }
 
 model MangaCollectionItem {

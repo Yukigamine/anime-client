@@ -10,9 +10,10 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { AnimeWithEntry } from "@/lib/list";
 import AnimeCard from "./AnimeCard";
+import CardSkeleton from "./CardSkeleton";
 
 type StatusTab =
   | "ALL"
@@ -40,12 +41,23 @@ export default function AnimeListClient({
 }) {
   const [activeTab, setActiveTab] = useState<StatusTab>("ALL");
   const [search, setSearch] = useState("");
+  const [isPending, startTransition] = useTransition();
+  const tabCacheRef = useRef<Record<StatusTab, AnimeWithEntry[]>>({} as any);
+
+  useEffect(() => {
+    const cache: Record<StatusTab, AnimeWithEntry[]> = {} as any;
+    TABS.forEach(({ value: tab }) => {
+      if (tab === "ALL") {
+        cache[tab] = items;
+      } else {
+        cache[tab] = items.filter((i) => i.listEntry?.watchStatus === tab);
+      }
+    });
+    tabCacheRef.current = cache;
+  }, [items]);
 
   const filtered = useMemo(() => {
-    let list = items;
-    if (activeTab !== "ALL") {
-      list = list.filter((i) => i.listEntry?.watchStatus === activeTab);
-    }
+    let list = tabCacheRef.current[activeTab] ?? items;
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -56,7 +68,7 @@ export default function AnimeListClient({
       );
     }
     return list;
-  }, [items, activeTab, search]);
+  }, [activeTab, search, items]);
 
   return (
     <Box>
@@ -71,7 +83,13 @@ export default function AnimeListClient({
       >
         <Tabs
           value={activeTab}
-          onChange={(_, v) => setActiveTab(v as StatusTab)}
+          onChange={(_, v) => {
+            if (search) {
+              startTransition(() => setActiveTab(v as StatusTab));
+            } else {
+              setActiveTab(v as StatusTab);
+            }
+          }}
           variant="scrollable"
           scrollButtons="auto"
           sx={{ flex: 1, minHeight: 40 }}
@@ -109,7 +127,7 @@ export default function AnimeListClient({
           size="small"
           placeholder="Search…"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => startTransition(() => setSearch(e.target.value))}
           slotProps={{
             input: {
               startAdornment: (
@@ -123,7 +141,15 @@ export default function AnimeListClient({
         />
       </Box>
 
-      {filtered.length === 0 ? (
+      {isPending ? (
+        <Grid container spacing={2}>
+          {Array.from({ length: 12 }).map((_, i) => (
+            <Grid key={i} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+              <CardSkeleton />
+            </Grid>
+          ))}
+        </Grid>
+      ) : filtered.length === 0 ? (
         <Box sx={{ textAlign: "center", py: 8, color: "text.secondary" }}>
           <Typography variant="h6">No entries found</Typography>
           {search && (

@@ -7,10 +7,37 @@ export const metadata: Metadata = { title: "Anime List – Anime Client" };
 export const dynamic = "force-dynamic";
 
 export default async function AnimeListPage() {
-  const [items, counts] = await Promise.all([
-    getAnimeList(),
-    getAnimeListCounts(),
-  ]);
+  let items = [];
+  let counts = {};
+
+  try {
+    [items, counts] = await Promise.all([getAnimeList(), getAnimeListCounts()]);
+  } catch (e) {
+    let err = "Unknown error";
+    if (e instanceof Error) {
+      err = e.message;
+    } else if (e && typeof e === "object" && "message" in e) {
+      err = String((e as { message: unknown }).message);
+    } else if (typeof e === "string") {
+      err = e;
+    }
+    console.error("Failed to load anime list:", err, e);
+    return (
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Typography variant="h4" sx={{ fontWeight: 700, mb: 4 }}>
+          Anime List
+        </Typography>
+        <Box sx={{ textAlign: "center", py: 12 }}>
+          <Typography variant="h5" color="error" gutterBottom>
+            Error loading list
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {err}
+          </Typography>
+        </Box>
+      </Container>
+    );
+  }
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>

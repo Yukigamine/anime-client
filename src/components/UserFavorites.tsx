@@ -4,7 +4,7 @@ import { Box, Tab, Tabs, Typography } from "@mui/material";
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
-import type { KitsuFavoriteItem } from "@/lib/kitsu/user";
+import type { KitsuFavoriteItem } from "@/lib/kitsu/user-types";
 
 const TYPE_LABELS: Record<KitsuFavoriteItem["type"], string> = {
   anime: "Anime",
