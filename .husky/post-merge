@@ -1,0 +1,8 @@
+#!/bin/sh
+# Check if the lockfile was changed in the last pull/merge
+changed_files="$(git diff-tree -r --name-only --no-commit-id ORIG_HEAD HEAD)"
+
+if echo "$changed_files" | grep -q "pnpm-lock.yaml"; then
+  echo "pnpm-lock.yaml changed. Running pnpm install..."
+  pnpm install
+fi

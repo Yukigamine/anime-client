@@ -1,0 +1,235 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum WatchStatus {
+  WATCHING
+  PLAN_TO_WATCH
+  COMPLETED
+  ON_HOLD
+  DROPPED
+}
+
+enum ReadStatus {
+  READING
+  PLAN_TO_READ
+  COMPLETED
+  ON_HOLD
+  DROPPED
+}
+
+enum ShowStatus {
+  AIRING
+  FINISHED
+  UPCOMING
+  CANCELLED
+  UNKNOWN
+}
+
+enum Provider {
+  KITSU
+  ANILIST
+}
+
+enum SyncStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum SyncDirection {
+  PULL
+  PUSH
+}
+
+enum MediaFormat {
+  DVD
+  BLU_RAY
+  VHS
+  DIGITAL
+  LIMITED_EDITION
+  OTHER
+}
+
+enum CollectionCondition {
+  MINT
+  NEAR_MINT
+  GOOD
+  FAIR
+  POOR
+}
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+
+model AuthToken {
+  id             String    @id @default(cuid())
+  provider       Provider  @unique
+  accessToken    String
+  refreshToken   String?
+  expiresAt      DateTime?
+  providerUserId String?
+  username       String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Sync Logs ────────────────────────────────────────────────────────────────
+
+model SyncLog {
+  id            String        @id @default(cuid())
+  provider      Provider
+  direction     SyncDirection
+  status        SyncStatus    @default(RUNNING)
+  animeSynced   Int           @default(0)
+  mangaSynced   Int           @default(0)
+  animeChanged  Int           @default(0)
+  mangaChanged  Int           @default(0)
+  errors        Json          @default("[]")
+  deletions     Json          @default("[]")
+  startedAt     DateTime      @default(now())
+  finishedAt    DateTime?
+}
+
+// ─── Anime ────────────────────────────────────────────────────────────────────
+
+model Anime {
+  id             String     @id @default(cuid())
+  kitsuId        String?    @unique
+  anilistId      Int?       @unique
+  malId          Int?       @unique
+
+  titleEn        String?
+  titleJp        String?
+  titleRomaji    String?
+  synopsis       String?
+  coverImageUrl  String?
+  bannerImageUrl String?
+  episodeCount   Int?
+  showStatus     ShowStatus @default(UNKNOWN)
+  averageRating  Float?
+  startDate      DateTime?
+  endDate        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  listEntry       AnimeListEntry?
+  collectionItems AnimeCollectionItem[]
+}
+
+model AnimeListEntry {
+  id      String @id @default(cuid())
+  animeId String @unique
+  anime   Anime  @relation(fields: [animeId], references: [id], onDelete: Cascade)
+
+  watchStatus  WatchStatus
+  progress     Int         @default(0)
+  rating       Float?
+  notes        String?
+  private      Boolean     @default(false)
+  rewatchCount Int         @default(0)
+  rewatching   Boolean     @default(false)
+
+  kitsuEntryId   String?
+  anilistEntryId Int?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime?
+}
+
+model AnimeCollectionItem {
+  id      String @id @default(cuid())
+  animeId String
+  anime   Anime  @relation(fields: [animeId], references: [id], onDelete: Cascade)
+
+  format      MediaFormat         @default(BLU_RAY)
+  condition   CollectionCondition @default(GOOD)
+  notes       String?
+  purchasedAt DateTime?
+  pricePaid   Float?
+  barcode     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Manga ────────────────────────────────────────────────────────────────────
+
+model Manga {
+  id             String     @id @default(cuid())
+  kitsuId        String?    @unique
+  anilistId      Int?       @unique
+  malId          Int?       @unique
+
+  titleEn        String?
+  titleJp        String?
+  titleRomaji    String?
+  synopsis       String?
+  coverImageUrl  String?
+  chapterCount   Int?
+  volumeCount    Int?
+  showStatus     ShowStatus @default(UNKNOWN)
+  averageRating  Float?
+  startDate      DateTime?
+  endDate        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  listEntry       MangaListEntry?
+  collectionItems MangaCollectionItem[]
+}
+
+model MangaListEntry {
+  id      String @id @default(cuid())
+  mangaId String @unique
+  manga   Manga  @relation(fields: [mangaId], references: [id], onDelete: Cascade)
+
+  readStatus      ReadStatus
+  progress        Int        @default(0)
+  progressVolumes Int        @default(0)
+  rating          Float?
+  notes           String?
+  private         Boolean    @default(false)
+  rereadCount     Int        @default(0)
+  rereading       Boolean    @default(false)
+
+  kitsuEntryId   String?
+  anilistEntryId Int?
+
+  startedAt   DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime?
+}
+
+model MangaCollectionItem {
+  id      String @id @default(cuid())
+  mangaId String
+  manga   Manga  @relation(fields: [mangaId], references: [id], onDelete: Cascade)
+
+  volumeNumber Int?
+  format       MediaFormat         @default(OTHER)
+  condition    CollectionCondition @default(GOOD)
+  notes        String?
+  purchasedAt  DateTime?
+  pricePaid    Float?
+  barcode      String?
+  isBox        Boolean             @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
