@@ -48,7 +48,7 @@ importers:
         specifier: 7.8.0
         version: 7.8.0(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(typescript@6.0.3)
       puppeteer:
-        specifier: ^24.42.0
+        specifier: 24.42.0
         version: 24.42.0(typescript@6.0.3)
       puppeteer-extra:
         specifier: ^3.3.6
