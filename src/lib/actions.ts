@@ -8,13 +8,18 @@ import { invalidateListCache } from "@/lib/cache";
 import { ensureValidKitsuToken, loginKitsu } from "@/lib/kitsu/auth";
 import { pullKitsu, pushKitsu } from "@/lib/kitsu/sync";
 import prisma from "@/lib/prisma";
+import {
+  validateAnimeListEntry,
+  validateMangaListEntry,
+  validateMediaRecord,
+} from "@/lib/validation";
 
-export type AuthStatus = Record<
+type AuthStatus = Record<
   "KITSU" | "ANILIST",
   { loggedIn: boolean; username: string | null }
 >;
 export type SyncStatusPayload = { logs: SyncLog[]; auth: AuthStatus };
-export type ActionResult<T = void> =
+type ActionResult<T = void> =
   | { ok: true; data: T }
   | { ok: false; error: string };
 
@@ -64,7 +69,7 @@ export async function loginKitsuAction(
   }
 }
 
-export async function logoutProviderAction(
+async function logoutProviderAction(
   provider: "KITSU" | "ANILIST" | "ALL",
 ): Promise<ActionResult> {
   try {
@@ -132,4 +137,147 @@ export async function getSyncStatusAction(): Promise<SyncStatusPayload> {
     getAuthStatus(),
   ]);
   return { logs, auth };
+}
+
+type InvalidEntry = {
+  id: string;
+  title: string | null;
+  issues: string[];
+  progress?: number;
+  progressLimit?: number | null;
+};
+
+export type InvalidEntriesResult = {
+  invalidAnime: InvalidEntry[];
+  invalidManga: InvalidEntry[];
+};
+
+export async function findInvalidEntriesAction(): Promise<InvalidEntriesResult> {
+  const [animeEntries, mangaEntries] = await Promise.all([
+    prisma.animeListEntry.findMany({ include: { anime: true } }),
+    prisma.mangaListEntry.findMany({ include: { manga: true } }),
+  ]);
+
+  const invalidAnime: InvalidEntry[] = [];
+  for (const entry of animeEntries) {
+    const entryIssues = validateAnimeListEntry(entry);
+    const mediaIssues = validateMediaRecord(entry.anime);
+    // Also check if progress exceeds episode count
+    if (entry.anime.episodeCount && entry.progress > entry.anime.episodeCount) {
+      entryIssues.push("progress exceeds episode count");
+    }
+    if (entryIssues.length > 0 || mediaIssues.length > 0) {
+      invalidAnime.push({
+        id: entry.id,
+        title: entry.anime.titleEn,
+        issues: [...entryIssues, ...mediaIssues],
+        progress: entry.progress,
+        progressLimit: entry.anime.episodeCount,
+      });
+    }
+  }
+
+  const invalidManga: InvalidEntry[] = [];
+  for (const entry of mangaEntries) {
+    const entryIssues = validateMangaListEntry(entry);
+    const mediaIssues = validateMediaRecord(entry.manga);
+    // Also check if progress exceeds chapter count
+    if (entry.manga.chapterCount && entry.progress > entry.manga.chapterCount) {
+      entryIssues.push("progress exceeds chapter count");
+    }
+    if (entryIssues.length > 0 || mediaIssues.length > 0) {
+      invalidManga.push({
+        id: entry.id,
+        title: entry.manga.titleEn,
+        issues: [...entryIssues, ...mediaIssues],
+        progress: entry.progress,
+        progressLimit: entry.manga.chapterCount,
+      });
+    }
+  }
+
+  return { invalidAnime, invalidManga };
+}
+
+export async function deleteInvalidEntriesAction(
+  animeIds: string[],
+  mangaIds: string[],
+): Promise<ActionResult> {
+  try {
+    await Promise.all([
+      animeIds.length > 0
+        ? prisma.animeListEntry.deleteMany({ where: { id: { in: animeIds } } })
+        : Promise.resolve(),
+      mangaIds.length > 0
+        ? prisma.mangaListEntry.deleteMany({ where: { id: { in: mangaIds } } })
+        : Promise.resolve(),
+    ]);
+    await invalidateListCache();
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export async function normalizeInvalidRatingsAction(): Promise<
+  ActionResult<{ animeFixed: number; mangaFixed: number }>
+> {
+  try {
+    let animeFixed = 0;
+    let mangaFixed = 0;
+
+    // Normalize anime ratings: clamp to 2-20 range (Kitsu minimum is 2)
+    const animeEntries = await prisma.animeListEntry.findMany({
+      where: {
+        OR: [{ rating: { lt: 2 } }, { rating: { gt: 20 } }],
+      },
+    });
+
+    for (const entry of animeEntries) {
+      if (entry.rating !== null) {
+        const clamped = Math.max(2, Math.min(20, entry.rating));
+        if (clamped !== entry.rating) {
+          await prisma.animeListEntry.update({
+            where: { id: entry.id },
+            data: { rating: clamped },
+          });
+          animeFixed++;
+        }
+      }
+    }
+
+    // Normalize manga ratings: clamp to 2-20 range
+    const mangaEntries = await prisma.mangaListEntry.findMany({
+      where: {
+        OR: [{ rating: { lt: 2 } }, { rating: { gt: 20 } }],
+      },
+    });
+
+    for (const entry of mangaEntries) {
+      if (entry.rating !== null) {
+        const clamped = Math.max(2, Math.min(20, entry.rating));
+        if (clamped !== entry.rating) {
+          await prisma.mangaListEntry.update({
+            where: { id: entry.id },
+            data: { rating: clamped },
+          });
+          mangaFixed++;
+        }
+      }
+    }
+
+    if (animeFixed > 0 || mangaFixed > 0) {
+      await invalidateListCache();
+    }
+
+    return { ok: true, data: { animeFixed, mangaFixed } };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }

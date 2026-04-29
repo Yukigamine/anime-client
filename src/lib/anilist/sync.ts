@@ -3,6 +3,12 @@ import { ReadStatus, ShowStatus, WatchStatus } from "@/generated/prisma/client";
 import { getToken } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import {
+  selectTitleFromAniList,
+  validateAnimeListEntry,
+  validateMangaListEntry,
+  validateMediaRecord,
+} from "@/lib/validation";
+import {
   type GraphQLTypes,
   MediaListStatus,
   MediaStatus,
@@ -32,6 +38,24 @@ function extractErrorMessage(error: unknown): string {
   }
 
   return errorMsg || "Unknown error";
+}
+
+// ---------------------------------------------------------------------------
+// Rating conversion: DB uses 0-20 scale (matching Kitsu), AniList uses 0-10
+// ---------------------------------------------------------------------------
+
+function toAniListRating(dbRating: number | null): number {
+  // Convert from DB 0-20 scale to AniList 0-10 scale
+  return dbRating != null ? Math.round((dbRating / 20) * 10 * 10) / 10 : 0;
+}
+
+function fromAniListRating(
+  anilistRating: number | null | undefined,
+): number | null {
+  // Convert from AniList 0-10 scale to DB 0-20 scale
+  return anilistRating != null && anilistRating > 0
+    ? Math.round((anilistRating / 10) * 20 * 10) / 10
+    : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -201,8 +225,13 @@ function reverseReadStatus(s: ReadStatus): MediaListStatus {
 // ---------------------------------------------------------------------------
 
 function buildMediaCommon(media: AniListMediaItem) {
+  const { title } = selectTitleFromAniList(
+    media.title?.english,
+    media.title?.romaji,
+    media.title?.native,
+  );
   return {
-    titleEn: media.title?.english ?? media.title?.romaji ?? null,
+    titleEn: title,
     titleJp: media.title?.native ?? null,
     titleRomaji: media.title?.romaji ?? null,
     synopsis: media.description ?? null,
@@ -214,22 +243,73 @@ function buildMediaCommon(media: AniListMediaItem) {
   };
 }
 
+function buildInvalidMediaContext(
+  media: AniListListItem["media"],
+  item: AniListListItem,
+): string {
+  if (!media) return `[no media]`;
+  const parts: string[] = [];
+
+  // Add available title
+  if (media.title?.romaji) parts.push(`"${media.title.romaji}"`);
+  if (media.title?.native) parts.push(`"${media.title.native}"`);
+
+  // Add IDs
+  if (media.id) parts.push(`AL:${media.id}`);
+  if (media.idMal) parts.push(`MAL:${media.idMal}`);
+
+  // Add current status on list
+  if (item.status) parts.push(`status:${item.status}`);
+  if (item.progress !== null && item.progress !== undefined)
+    parts.push(`progress:${item.progress}`);
+
+  return parts.length > 0 ? parts.join(", ") : "[no details]";
+}
+
 async function pullAnimeItem(item: AniListListItem): Promise<boolean> {
   const media = item.media;
   if (!media) return false;
+
+  // Resolve title with fallback chain
+  const { title: resolvedTitle, fallbackUsed } = selectTitleFromAniList(
+    media.title?.english,
+    media.title?.romaji,
+    media.title?.native,
+  );
+
+  // Validate media data before processing
+  const mediaIssues = validateMediaRecord({
+    anilistId: media.id,
+    malId: media.idMal,
+    titleEn: resolvedTitle,
+  });
+  if (mediaIssues.length > 0) {
+    console.warn(
+      `[AniList Pull] Skipping invalid anime (${mediaIssues.join(", ")}): ${buildInvalidMediaContext(media, item)}`,
+    );
+    return false;
+  }
+
   const common = buildMediaCommon(media);
   const score = item.score ?? 0;
+  const dbRating = fromAniListRating(score);
+
+  // Validate entry data (using converted DB rating for 0-20 scale)
+  const entryIssues = validateAnimeListEntry({
+    progress: item.progress ?? 0,
+    rating: dbRating,
+    rewatchCount: item.repeat ?? 0,
+  });
+  if (entryIssues.length > 0) {
+    console.warn(
+      `[AniList Pull] Skipping invalid anime entry (${entryIssues.join(", ")}): ${buildInvalidMediaContext(media, item)}`,
+    );
+    return false;
+  }
+
   const anilistUpdatedAt = item.updatedAt
     ? new Date((item.updatedAt as number) * 1000)
     : new Date();
-
-  const sharedMedia = {
-    anilistId: media.id,
-    ...(media.idMal ? { malId: media.idMal } : {}),
-    ...common,
-    bannerImageUrl: media.bannerImage ?? null,
-    episodeCount: media.episodes ?? null,
-  };
 
   let animeRecord = await prisma.anime.findUnique({
     where: { anilistId: media.id },
@@ -238,18 +318,47 @@ async function pullAnimeItem(item: AniListListItem): Promise<boolean> {
     animeRecord = await prisma.anime.findUnique({
       where: { malId: media.idMal },
     });
+
   if (animeRecord) {
-    animeRecord = await prisma.anime.update({
-      where: { id: animeRecord.id },
-      data: sharedMedia,
-    });
+    // For existing anime: only update episode count (Kitsu is primary source for details)
+    // Update episodeCount if AniList has a higher count (for clamping logic edge cases)
+    if ((media.episodes ?? 0) > (animeRecord.episodeCount ?? 0)) {
+      animeRecord = await prisma.anime.update({
+        where: { id: animeRecord.id },
+        data: { episodeCount: media.episodes ?? null },
+      });
+    }
   } else {
+    // For new anime: pull all details and let Kitsu overwrite if there are mismatches
+    const sharedMedia = {
+      anilistId: media.id,
+      ...(media.idMal ? { malId: media.idMal } : {}),
+      ...common,
+      bannerImageUrl: media.bannerImage ?? null,
+      episodeCount: media.episodes ?? null,
+    };
     animeRecord = await prisma.anime.create({ data: sharedMedia });
+    if (fallbackUsed === "romaji") {
+      console.info(
+        `[AniList Pull] Using Romaji title for new anime (English missing): "${resolvedTitle}" (AL:${media.id})`,
+      );
+    } else if (fallbackUsed === "native") {
+      console.info(
+        `[AniList Pull] Using Native title for new anime (English & Romaji missing): "${resolvedTitle}" (AL:${media.id})`,
+      );
+    } else if (fallbackUsed === "missing_all") {
+      console.warn(
+        `[AniList Pull] No title available for new anime (AL:${media.id})`,
+      );
+    }
   }
 
   const existing = await prisma.animeListEntry.findUnique({
     where: { animeId: animeRecord.id },
   });
+
+  // Only use AniList rating if no local rating exists (Kitsu is primary source with finer granularity)
+  const rating = existing?.rating ?? dbRating;
 
   const isNewer = !existing?.updatedAt || anilistUpdatedAt > existing.updatedAt;
 
@@ -258,7 +367,7 @@ async function pullAnimeItem(item: AniListListItem): Promise<boolean> {
       anilistEntryId: item.id,
       watchStatus: mapWatchStatus(item.status),
       progress: item.progress ?? 0,
-      rating: score > 0 ? score : null,
+      rating: rating,
       notes: item.notes ?? null,
       private: item.private ?? false,
       rewatching: item.status === MediaListStatus.REPEATING,
@@ -299,19 +408,48 @@ async function pullAnimeItem(item: AniListListItem): Promise<boolean> {
 async function pullMangaItem(item: AniListListItem): Promise<boolean> {
   const media = item.media;
   if (!media) return false;
+
+  // Resolve title with fallback chain
+  const { title: resolvedTitle, fallbackUsed } = selectTitleFromAniList(
+    media.title?.english,
+    media.title?.romaji,
+    media.title?.native,
+  );
+
+  // Validate media data before processing
+  const mediaIssues = validateMediaRecord({
+    anilistId: media.id,
+    malId: media.idMal,
+    titleEn: resolvedTitle,
+  });
+  if (mediaIssues.length > 0) {
+    console.warn(
+      `[AniList Pull] Skipping invalid manga (${mediaIssues.join(", ")}): ${buildInvalidMediaContext(media, item)}`,
+    );
+    return false;
+  }
+
   const common = buildMediaCommon(media);
   const score = item.score ?? 0;
+  const dbRating = fromAniListRating(score);
+
+  // Validate entry data (using converted DB rating for 0-20 scale)
+  const entryIssues = validateMangaListEntry({
+    progress: item.progress ?? 0,
+    progressVolumes: item.progressVolumes ?? 0,
+    rating: dbRating,
+    rereadCount: item.repeat ?? 0,
+  });
+  if (entryIssues.length > 0) {
+    console.warn(
+      `[AniList Pull] Skipping invalid manga entry (${entryIssues.join(", ")}): ${buildInvalidMediaContext(media, item)}`,
+    );
+    return false;
+  }
+
   const anilistUpdatedAt = item.updatedAt
     ? new Date((item.updatedAt as number) * 1000)
     : new Date();
-
-  const sharedMedia = {
-    anilistId: media.id,
-    ...(media.idMal ? { malId: media.idMal } : {}),
-    ...common,
-    chapterCount: media.chapters ?? null,
-    volumeCount: media.volumes ?? null,
-  };
 
   let mangaRecord = await prisma.manga.findUnique({
     where: { anilistId: media.id },
@@ -320,18 +458,54 @@ async function pullMangaItem(item: AniListListItem): Promise<boolean> {
     mangaRecord = await prisma.manga.findUnique({
       where: { malId: media.idMal },
     });
+
   if (mangaRecord) {
-    mangaRecord = await prisma.manga.update({
-      where: { id: mangaRecord.id },
-      data: sharedMedia,
-    });
+    // For existing manga: only update chapter/volume counts (Kitsu is primary source for details)
+    // Update if AniList has higher counts (for clamping logic edge cases)
+    const updates: Record<string, number | null> = {};
+    if ((media.chapters ?? 0) > (mangaRecord.chapterCount ?? 0)) {
+      updates.chapterCount = media.chapters ?? null;
+    }
+    if ((media.volumes ?? 0) > (mangaRecord.volumeCount ?? 0)) {
+      updates.volumeCount = media.volumes ?? null;
+    }
+    if (Object.keys(updates).length > 0) {
+      mangaRecord = await prisma.manga.update({
+        where: { id: mangaRecord.id },
+        data: updates,
+      });
+    }
   } else {
+    // For new manga: pull all details and let Kitsu overwrite if there are mismatches
+    const sharedMedia = {
+      anilistId: media.id,
+      ...(media.idMal ? { malId: media.idMal } : {}),
+      ...common,
+      chapterCount: media.chapters ?? null,
+      volumeCount: media.volumes ?? null,
+    };
     mangaRecord = await prisma.manga.create({ data: sharedMedia });
+    if (fallbackUsed === "romaji") {
+      console.info(
+        `[AniList Pull] Using Romaji title for new manga (English missing): "${resolvedTitle}" (AL:${media.id})`,
+      );
+    } else if (fallbackUsed === "native") {
+      console.info(
+        `[AniList Pull] Using Native title for new manga (English & Romaji missing): "${resolvedTitle}" (AL:${media.id})`,
+      );
+    } else if (fallbackUsed === "missing_all") {
+      console.warn(
+        `[AniList Pull] No title available for new manga (AL:${media.id})`,
+      );
+    }
   }
 
   const existing = await prisma.mangaListEntry.findUnique({
     where: { mangaId: mangaRecord.id },
   });
+
+  // Only use AniList rating if no local rating exists (Kitsu is primary source with finer granularity)
+  const rating = existing?.rating ?? dbRating;
 
   const isNewer = !existing?.updatedAt || anilistUpdatedAt > existing.updatedAt;
 
@@ -341,7 +515,7 @@ async function pullMangaItem(item: AniListListItem): Promise<boolean> {
       readStatus: mapReadStatus(item.status),
       progress: item.progress ?? 0,
       progressVolumes: item.progressVolumes ?? 0,
-      rating: score > 0 ? score : null,
+      rating: rating,
       notes: item.notes ?? null,
       private: item.private ?? false,
       rereading: item.status === MediaListStatus.REPEATING,
@@ -457,6 +631,7 @@ export async function pullAniList(logId: string): Promise<void> {
 }
 
 type AniListRemoteEntry = {
+  entryId: number;
   title: string;
   status: AniListListItem["status"];
   progress: number | null | undefined;
@@ -465,6 +640,9 @@ type AniListRemoteEntry = {
   notes: string | null | undefined;
   repeat: number | null | undefined;
   private: boolean | null | undefined;
+  malId: number | null | undefined;
+  episodes: number | null | undefined;
+  chapters: number | null | undefined;
 };
 
 async function scanAniListEntries(
@@ -479,12 +657,13 @@ async function scanAniListEntries(
     const pageData = result.Page;
     if (!pageData) break;
     for (const item of pageData.mediaList ?? []) {
-      if (item.id == null) continue;
-      map.set(item.id, {
+      if (item.id == null || item.media?.id == null) continue;
+      map.set(item.media.id, {
+        entryId: item.id,
         title:
-          item.media?.title?.english ??
-          item.media?.title?.romaji ??
-          String(item.id),
+          item.media.title?.english ??
+          item.media.title?.romaji ??
+          String(item.media.id),
         status: item.status,
         progress: item.progress,
         progressVolumes: item.progressVolumes,
@@ -492,6 +671,9 @@ async function scanAniListEntries(
         notes: item.notes,
         repeat: item.repeat,
         private: item.private,
+        malId: item.media?.idMal,
+        episodes: item.media?.episodes,
+        chapters: item.media?.chapters,
       });
     }
     hasNext = pageData.pageInfo?.hasNextPage ?? false;
@@ -502,6 +684,7 @@ async function scanAniListEntries(
 
 function anilistAnimeNeedsUpdate(
   local: {
+    title?: string | null;
     watchStatus: WatchStatus;
     progress: number;
     rating: number | null;
@@ -511,19 +694,66 @@ function anilistAnimeNeedsUpdate(
   },
   remote: AniListRemoteEntry,
 ): boolean {
-  const remoteRating = (remote.score ?? 0) > 0 ? (remote.score ?? null) : null;
-  return (
-    mapWatchStatus(remote.status) !== local.watchStatus ||
-    (remote.progress ?? 0) !== local.progress ||
-    remoteRating !== local.rating ||
-    (remote.notes || null) !== local.notes ||
-    (remote.repeat ?? 0) !== local.rewatchCount ||
-    (remote.private ?? false) !== local.private
-  );
+  // Compare in AniList scale using truncation to avoid round-trip precision churn.
+  const localRatingAniList =
+    local.rating != null ? Math.trunc(local.rating / 2) : 0;
+  const remoteRatingAniList = Math.trunc(remote.score ?? 0);
+  const statusDiff = mapWatchStatus(remote.status) !== local.watchStatus;
+  // AniList auto-sets progress = episode count on completion, so comparing progress when both
+  // sides are COMPLETED causes endless update loops when local episode count differs from AniList.
+  const bothCompleted =
+    !statusDiff && local.watchStatus === WatchStatus.COMPLETED;
+  const progressDiff =
+    !bothCompleted && (remote.progress ?? 0) !== local.progress;
+  const ratingDiff = localRatingAniList !== remoteRatingAniList;
+  const notesDiff = (remote.notes || null) !== (local.notes || null);
+  const repeatDiff = (remote.repeat ?? 0) !== local.rewatchCount;
+  const privateDiff = (remote.private ?? false) !== local.private;
+
+  const needsUpdate =
+    statusDiff ||
+    progressDiff ||
+    ratingDiff ||
+    notesDiff ||
+    repeatDiff ||
+    privateDiff;
+
+  if (needsUpdate) {
+    const label = local.title ?? "(untitled anime)";
+    const diffs: string[] = [];
+    if (statusDiff)
+      diffs.push(
+        `status local=${local.watchStatus} remote=${mapWatchStatus(remote.status)}`,
+      );
+    if (progressDiff)
+      diffs.push(
+        `progress local=${local.progress} remote=${remote.progress ?? 0}`,
+      );
+    if (ratingDiff)
+      diffs.push(
+        `rating local20=${local.rating ?? 0} local10trunc=${localRatingAniList} remote10trunc=${remoteRatingAniList}`,
+      );
+    if (notesDiff)
+      diffs.push(
+        `notes local=${JSON.stringify(local.notes)} remote=${JSON.stringify(remote.notes || null)}`,
+      );
+    if (repeatDiff)
+      diffs.push(
+        `repeat local=${local.rewatchCount} remote=${remote.repeat ?? 0}`,
+      );
+    if (privateDiff)
+      diffs.push(
+        `private local=${local.private} remote=${remote.private ?? false}`,
+      );
+    console.info(`[AniList Push Diff] anime "${label}": ${diffs.join(" | ")}`);
+  }
+
+  return needsUpdate;
 }
 
 function anilistMangaNeedsUpdate(
   local: {
+    title?: string | null;
     readStatus: ReadStatus;
     progress: number;
     progressVolumes: number;
@@ -534,16 +764,122 @@ function anilistMangaNeedsUpdate(
   },
   remote: AniListRemoteEntry,
 ): boolean {
-  const remoteRating = (remote.score ?? 0) > 0 ? (remote.score ?? null) : null;
-  return (
-    mapReadStatus(remote.status) !== local.readStatus ||
-    (remote.progress ?? 0) !== local.progress ||
-    (remote.progressVolumes ?? 0) !== local.progressVolumes ||
-    remoteRating !== local.rating ||
-    (remote.notes || null) !== local.notes ||
-    (remote.repeat ?? 0) !== local.rereadCount ||
-    (remote.private ?? false) !== local.private
-  );
+  // Compare in AniList scale using truncation to avoid round-trip precision churn.
+  const localRatingAniList =
+    local.rating != null ? Math.trunc(local.rating / 2) : 0;
+  const remoteRatingAniList = Math.trunc(remote.score ?? 0);
+  const statusDiff = mapReadStatus(remote.status) !== local.readStatus;
+  // AniList auto-sets progress = chapter count on completion, so comparing progress when both
+  // sides are COMPLETED causes endless update loops when local chapter count differs from AniList.
+  const bothCompleted =
+    !statusDiff && local.readStatus === ReadStatus.COMPLETED;
+  const progressDiff =
+    !bothCompleted && (remote.progress ?? 0) !== local.progress;
+  const progressVolumesDiff =
+    !bothCompleted && (remote.progressVolumes ?? 0) !== local.progressVolumes;
+  const ratingDiff = localRatingAniList !== remoteRatingAniList;
+  const notesDiff = (remote.notes || null) !== (local.notes || null);
+  const repeatDiff = (remote.repeat ?? 0) !== local.rereadCount;
+  const privateDiff = (remote.private ?? false) !== local.private;
+
+  const needsUpdate =
+    statusDiff ||
+    progressDiff ||
+    progressVolumesDiff ||
+    ratingDiff ||
+    notesDiff ||
+    repeatDiff ||
+    privateDiff;
+
+  if (needsUpdate) {
+    const label = local.title ?? "(untitled manga)";
+    const diffs: string[] = [];
+    if (statusDiff)
+      diffs.push(
+        `status local=${local.readStatus} remote=${mapReadStatus(remote.status)}`,
+      );
+    if (progressDiff)
+      diffs.push(
+        `progress local=${local.progress} remote=${remote.progress ?? 0}`,
+      );
+    if (progressVolumesDiff)
+      diffs.push(
+        `progressVolumes local=${local.progressVolumes} remote=${remote.progressVolumes ?? 0}`,
+      );
+    if (ratingDiff)
+      diffs.push(
+        `rating local20=${local.rating ?? 0} local10trunc=${localRatingAniList} remote10trunc=${remoteRatingAniList}`,
+      );
+    if (notesDiff)
+      diffs.push(
+        `notes local=${JSON.stringify(local.notes)} remote=${JSON.stringify(remote.notes || null)}`,
+      );
+    if (repeatDiff)
+      diffs.push(
+        `repeat local=${local.rereadCount} remote=${remote.repeat ?? 0}`,
+      );
+    if (privateDiff)
+      diffs.push(
+        `private local=${local.private} remote=${remote.private ?? false}`,
+      );
+    console.info(`[AniList Push Diff] manga "${label}": ${diffs.join(" | ")}`);
+  }
+
+  return needsUpdate;
+}
+
+// ---------------------------------------------------------------------------
+// Helper to lookup media by malId and return correct mediaId
+// ---------------------------------------------------------------------------
+
+async function getMediaIdByMalId(
+  malId: number,
+  type: "ANIME" | "MANGA",
+  accessToken: string,
+): Promise<number | null> {
+  try {
+    const query = `
+      query GetMediaByMalId($malId: Int, $type: MediaType) {
+        Media(idMal: $malId, type: $type) {
+          id
+        }
+      }
+    `;
+    const res = await fetch(ANILIST_API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        query,
+        variables: { malId, type },
+      }),
+      cache: "no-store",
+    });
+
+    if (!res.ok) return null;
+
+    const body = (await res.json()) as {
+      data?: { Media?: { id?: number } | null };
+      errors?: { message: string }[];
+    };
+
+    if (body.errors?.length) {
+      console.warn(
+        `[AniList] Failed to lookup media by malId ${malId}: ${body.errors[0].message}`,
+      );
+      return null;
+    }
+
+    return body.data?.Media?.id ?? null;
+  } catch (err) {
+    console.warn(
+      `[AniList] Error looking up malId ${malId}:`,
+      extractErrorMessage(err),
+    );
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -554,6 +890,40 @@ function anilistMangaNeedsUpdate(
 const ANILIST_API_URL =
   process.env.ANILIST_API_URL ?? "https://graphql.anilist.co";
 const PUSH_CHUNK_SIZE = 10;
+
+type AniListApiError = {
+  message: string;
+  validation?: Record<string, unknown>;
+};
+
+function formatAniListApiErrors(errors: AniListApiError[]): string {
+  const messages = errors
+    .map((e) => e.message)
+    .filter(Boolean)
+    .join("; ");
+
+  const validationDetails: string[] = [];
+  for (const err of errors) {
+    if (!err.validation) continue;
+    for (const [field, value] of Object.entries(err.validation)) {
+      if (Array.isArray(value)) {
+        const text = value.filter((v) => typeof v === "string").join(" | ");
+        validationDetails.push(text ? `${field}: ${text}` : field);
+      } else if (typeof value === "string") {
+        validationDetails.push(`${field}: ${value}`);
+      } else {
+        validationDetails.push(field);
+      }
+    }
+  }
+
+  if (validationDetails.length > 0) {
+    const prefix = messages || "validation";
+    return `${prefix} (${validationDetails.join(", ")})`;
+  }
+
+  return messages || "Unknown AniList API error";
+}
 
 async function batchAniListMutation(
   query: string,
@@ -573,6 +943,12 @@ async function batchAniListMutation(
       cache: "no-store",
     });
 
+    // Check for Cloudflare challenge
+    if (res.headers.get("cf-mitigated") === "challenge") {
+      console.error(`[AniList] Cloudflare challenge detected`);
+      throw new Error("AniList blocked by Cloudflare challenge");
+    }
+
     if (res.status === 429) {
       const raw = res.headers.get("Retry-After");
       const parsed = raw != null ? parseInt(raw, 10) : Number.NaN;
@@ -587,19 +963,50 @@ async function batchAniListMutation(
 
     if (!res.ok) {
       const text = await res.text().catch(() => "(unreadable)");
-      console.error(
-        `[AniList] HTTP ${res.status} — query preview:\n${query.slice(0, 500)}`,
-      );
-      console.error(`[AniList] Response body: ${text}`);
+
+      // Try to parse as JSON to extract GraphQL error messages
+      let body: { errors?: AniListApiError[] } | null = null;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        // Not JSON, will handle as raw text
+      }
+
+      // Prioritize GraphQL error messages if available
+      if (body?.errors?.length) {
+        const errorMsg = formatAniListApiErrors(body.errors);
+        console.error(`[AniList] API Error: ${errorMsg}`);
+        const hasValidationError = body.errors.some((e) => e.validation);
+        const hasMediaIdValidationError = body.errors.some(
+          (e) => e.validation?.mediaId,
+        );
+        let finalMsg = errorMsg;
+        if (hasMediaIdValidationError) finalMsg += " [VALIDATION:mediaId]";
+        else if (hasValidationError) finalMsg += " [VALIDATION:other]";
+        throw new Error(finalMsg);
+      }
+
+      // No GraphQL error message, just log HTTP status
+      console.error(`[AniList] HTTP ${res.status}`);
       throw new Error(`AniList HTTP ${res.status}: ${text.slice(0, 200)}`);
     }
 
     const body = (await res.json()) as {
       data?: Record<string, unknown>;
-      errors?: { message: string }[];
+      errors?: AniListApiError[];
     };
-    if (body.errors?.length)
-      throw new Error(body.errors.map((e) => e.message).join("; "));
+    if (body.errors?.length) {
+      const errorMsg = formatAniListApiErrors(body.errors);
+      console.error(`[AniList] API Error: ${errorMsg}`);
+      const hasValidationError = body.errors.some((e) => e.validation);
+      const hasMediaIdValidationError = body.errors.some(
+        (e) => e.validation?.mediaId,
+      );
+      let finalMsg = errorMsg;
+      if (hasMediaIdValidationError) finalMsg += " [VALIDATION:mediaId]";
+      else if (hasValidationError) finalMsg += " [VALIDATION:other]";
+      throw new Error(finalMsg);
+    }
     return body.data ?? {};
   }
   throw new Error("AniList rate limit: exceeded retry limit");
@@ -608,6 +1015,7 @@ async function batchAniListMutation(
 interface SaveArgs {
   id?: number;
   mediaId?: number;
+  malId?: number;
   status: string;
   progress: number;
   progressVolumes?: number;
@@ -623,6 +1031,9 @@ interface SaveOp {
   isCreate: boolean;
   localEntryId: string | null;
   mediaType: "anime" | "manga";
+  mediaRecordId?: string; // anime or manga record ID for clearing bad anilistId
+  title: string | null; // For logging purposes when validation fails
+  malId?: number | null; // For fallback if anilistId is invalid
 }
 
 interface DeleteOp {
@@ -726,9 +1137,9 @@ export async function pushAniList(logId: string): Promise<void> {
 
   const errors: string[] = [];
   const deletions: string[] = [];
-  let animeSynced = 0;
+  let animeMatched = 0;
   let animeChanged = 0;
-  let mangaSynced = 0;
+  let mangaMatched = 0;
   let mangaChanged = 0;
 
   // ── Phase 1: Scan remote + load local in parallel ─────────────────────────
@@ -737,118 +1148,389 @@ export async function pushAniList(logId: string): Promise<void> {
     await Promise.all([
       scanAniListEntries(username, "ANIME" as GraphQLTypes["MediaType"]),
       scanAniListEntries(username, "MANGA" as GraphQLTypes["MediaType"]),
-      prisma.animeListEntry.findMany({ include: { anime: true } }),
-      prisma.mangaListEntry.findMany({ include: { manga: true } }),
+      prisma.animeListEntry.findMany({
+        include: { anime: true },
+        orderBy: { id: "asc" },
+      }),
+      prisma.mangaListEntry.findMany({
+        include: { manga: true },
+        orderBy: { id: "asc" },
+      }),
     ]);
+
+  // Log anime entries with missing or potentially invalid episode counts
+  const missingEpisodeCount = animeEntries.filter((e) => !e.anime.episodeCount);
+  if (missingEpisodeCount.length > 0) {
+    console.warn(
+      `[AniList Push] Found ${missingEpisodeCount.length} anime entries with null episodeCount (cannot validate progress):`,
+    );
+    for (const entry of missingEpisodeCount.slice(0, 10)) {
+      console.warn(
+        `  - ${entry.id}: progress=${entry.progress}, title="${entry.anime.titleEn}"`,
+      );
+    }
+  }
+
+  const invalidProgressAnime = animeEntries.filter(
+    (e) => e.anime.episodeCount && e.progress > e.anime.episodeCount,
+  );
+  if (invalidProgressAnime.length > 0) {
+    console.warn(
+      `[AniList Push] Found ${invalidProgressAnime.length} anime entries with progress > episodeCount:`,
+    );
+    for (const entry of invalidProgressAnime) {
+      console.warn(
+        `  - ${entry.id}: progress=${entry.progress}, episodes=${entry.anime.episodeCount}, title="${entry.anime.titleEn}"`,
+      );
+    }
+  }
+
+  // Log manga entries with missing or potentially invalid chapter counts
+  const missingChapterCount = mangaEntries.filter((e) => !e.manga.chapterCount);
+  if (missingChapterCount.length > 0) {
+    console.warn(
+      `[AniList Push] Found ${missingChapterCount.length} manga entries with null chapterCount (cannot validate progress):`,
+    );
+    for (const entry of missingChapterCount.slice(0, 10)) {
+      console.warn(
+        `  - ${entry.id}: progress=${entry.progress}, title="${entry.manga.titleEn}"`,
+      );
+    }
+  }
+
+  const invalidProgressManga = mangaEntries.filter(
+    (e) => e.manga.chapterCount && e.progress > e.manga.chapterCount,
+  );
+  if (invalidProgressManga.length > 0) {
+    console.warn(
+      `[AniList Push] Found ${invalidProgressManga.length} manga entries with progress > chapterCount:`,
+    );
+    for (const entry of invalidProgressManga) {
+      console.warn(
+        `  - ${entry.id}: progress=${entry.progress}, chapters=${entry.manga.chapterCount}, title="${entry.manga.titleEn}"`,
+      );
+    }
+  }
 
   // ── Phase 2: Build operation lists ────────────────────────────────────────
 
   const saveOps: SaveOp[] = [];
   const deleteOps: DeleteOp[] = [];
 
+  // Build malId -> mediaId lookup maps (remote map is now keyed by mediaId)
+  const malIdToAnimeEntry = new Map<number, number>();
+  const malIdToMangaEntry = new Map<number, number>();
+  for (const [mediaId, remote] of remoteAnimeMap) {
+    if (remote.malId) malIdToAnimeEntry.set(remote.malId, mediaId);
+  }
+  for (const [mediaId, remote] of remoteMangaMap) {
+    if (remote.malId) malIdToMangaEntry.set(remote.malId, mediaId);
+  }
+
   for (const entry of animeEntries) {
+    // Validate entry before attempting sync
+    const entryIssues = validateAnimeListEntry(entry);
+    const mediaIssues = validateMediaRecord(entry.anime);
+    if (entryIssues.length > 0 || mediaIssues.length > 0) {
+      // Prevent accidental delete: mark matching remote entry as handled even if skipped.
+      if (entry.anime.anilistId != null)
+        remoteAnimeMap.delete(entry.anime.anilistId);
+      if (entry.anime.malId) {
+        const mediaId = malIdToAnimeEntry.get(entry.anime.malId);
+        if (mediaId !== undefined) remoteAnimeMap.delete(mediaId);
+      }
+      errors.push(
+        `anime entry ${entry.id}: ${[...entryIssues, ...mediaIssues].join(", ")}`,
+      );
+      continue;
+    }
+
     const alias = `s${saveOps.length}`;
+
+    // Determine clamped progress based on local episode count and remote data
+    let clampedProgress = entry.progress;
+    let remoteEpisodeCount: number | null = null;
+
     const animeArgs = {
       status: reverseWatchStatus(entry.watchStatus),
-      progress: entry.progress,
-      score: entry.rating ?? 0,
+      progress: clampedProgress,
+      score: toAniListRating(entry.rating),
       notes: entry.notes ?? "",
       repeat: entry.rewatchCount,
       private: entry.private,
     };
-    if (entry.anilistEntryId != null) {
-      const remote = remoteAnimeMap.get(entry.anilistEntryId);
-      remoteAnimeMap.delete(entry.anilistEntryId);
+
+    // Match by mediaId first, then fall back to malId
+    let remote: AniListRemoteEntry | undefined;
+    let matchedBy: "anilistId" | "malId" | null = null;
+    if (entry.anime.anilistId != null) {
+      remote = remoteAnimeMap.get(entry.anime.anilistId);
       if (remote) {
-        if (!anilistAnimeNeedsUpdate(entry, remote)) continue;
-        saveOps.push({
-          alias,
-          args: { id: entry.anilistEntryId, ...animeArgs },
-          isCreate: false,
-          localEntryId: null,
-          mediaType: "anime",
-        });
-      } else if (entry.anime.anilistId != null) {
-        // Stale entry ID — not found on remote; recreate by mediaId
-        saveOps.push({
-          alias,
-          args: { mediaId: entry.anime.anilistId, ...animeArgs },
-          isCreate: true,
-          localEntryId: entry.id,
-          mediaType: "anime",
-        });
+        matchedBy = "anilistId";
+        remoteAnimeMap.delete(entry.anime.anilistId);
       }
-    } else if (entry.anime.anilistId != null) {
+    }
+    if (!remote && entry.anime.malId) {
+      const mediaId = malIdToAnimeEntry.get(entry.anime.malId);
+      if (mediaId !== undefined) {
+        remote = remoteAnimeMap.get(mediaId);
+        if (remote) {
+          matchedBy = "malId";
+          remoteAnimeMap.delete(mediaId);
+        }
+      }
+    }
+
+    if (remote) {
+      animeMatched++;
+      if (
+        !anilistAnimeNeedsUpdate(
+          { ...entry, title: entry.anime.titleEn },
+          remote,
+        )
+      )
+        continue;
+
+      console.info(
+        `[AniList Push Trace] anime "${entry.anime.titleEn}" -> UPDATE (matchedBy=${matchedBy ?? "unknown"})`,
+      );
+
+      // Use remote's episode count for validation (AniList is authoritative for their API)
+      remoteEpisodeCount = remote.episodes ?? null;
+      if (remoteEpisodeCount) {
+        clampedProgress = Math.min(entry.progress, remoteEpisodeCount);
+        animeArgs.progress = clampedProgress;
+
+        if (clampedProgress !== entry.progress) {
+          const localCount = entry.anime.episodeCount;
+          if (
+            localCount &&
+            remoteEpisodeCount &&
+            localCount !== remoteEpisodeCount
+          ) {
+            console.warn(
+              `[AniList Push] Episode count mismatch for ${entry.anime.titleEn}: local=${localCount}, AniList=${remoteEpisodeCount}. Clamping progress from ${entry.progress} to ${clampedProgress}`,
+            );
+          } else {
+            console.warn(
+              `[AniList Push] Clamping anime progress: ${entry.anime.titleEn} (${entry.id}) from ${entry.progress} to ${clampedProgress} (episodes: ${remoteEpisodeCount})`,
+            );
+          }
+        }
+      }
+
       saveOps.push({
         alias,
-        args: { mediaId: entry.anime.anilistId, ...animeArgs },
+        args: { id: remote.entryId, ...animeArgs },
+        isCreate: false,
+        localEntryId: null,
+        mediaType: "anime",
+        title: entry.anime.titleEn,
+        malId: entry.anime.malId,
+      });
+    } else if (entry.anime.anilistId != null) {
+      console.warn(
+        `[AniList Push] No remote match for anime "${entry.anime.titleEn}" (anilistId=${entry.anime.anilistId}, malId=${entry.anime.malId ?? "null"}, localEntryId=${entry.id})`,
+      );
+      console.info(
+        `[AniList Push Trace] anime "${entry.anime.titleEn}" -> CREATE`,
+      );
+      // Clamp progress based on local episode count
+      if (entry.anime.episodeCount) {
+        clampedProgress = Math.min(entry.progress, entry.anime.episodeCount);
+        animeArgs.progress = clampedProgress;
+
+        if (clampedProgress !== entry.progress) {
+          console.warn(
+            `[AniList Push] Clamping anime progress on create: ${entry.anime.titleEn} (${entry.id}) from ${entry.progress} to ${clampedProgress} (episodes: ${entry.anime.episodeCount})`,
+          );
+        }
+      }
+
+      saveOps.push({
+        alias,
+        args: {
+          mediaId: entry.anime.anilistId,
+          malId: entry.anime.malId ?? undefined,
+          ...animeArgs,
+        },
         isCreate: true,
         localEntryId: entry.id,
+        mediaRecordId: entry.anime.id,
         mediaType: "anime",
+        title: entry.anime.titleEn,
+        malId: entry.anime.malId,
       });
     }
   }
 
   for (const entry of mangaEntries) {
+    // Validate entry before attempting sync
+    const entryIssues = validateMangaListEntry(entry);
+    const mediaIssues = validateMediaRecord(entry.manga);
+    if (entryIssues.length > 0 || mediaIssues.length > 0) {
+      // Prevent accidental delete: mark matching remote entry as handled even if skipped.
+      if (entry.manga.anilistId != null)
+        remoteMangaMap.delete(entry.manga.anilistId);
+      if (entry.manga.malId) {
+        const mediaId = malIdToMangaEntry.get(entry.manga.malId);
+        if (mediaId !== undefined) remoteMangaMap.delete(mediaId);
+      }
+      errors.push(
+        `manga entry ${entry.id}: ${[...entryIssues, ...mediaIssues].join(", ")}`,
+      );
+      continue;
+    }
+
     const alias = `s${saveOps.length}`;
+
+    // Determine clamped progress based on local chapter count and remote data
+    let clampedProgress = entry.progress;
+    let remoteChapterCount: number | null = null;
+
     const mangaArgs = {
       status: reverseReadStatus(entry.readStatus),
-      progress: entry.progress,
+      progress: clampedProgress,
       progressVolumes: entry.progressVolumes,
-      score: entry.rating ?? 0,
+      score: toAniListRating(entry.rating),
       notes: entry.notes ?? "",
       repeat: entry.rereadCount,
       private: entry.private,
     };
-    if (entry.anilistEntryId != null) {
-      const remote = remoteMangaMap.get(entry.anilistEntryId);
-      remoteMangaMap.delete(entry.anilistEntryId);
-      if (remote) {
-        if (!anilistMangaNeedsUpdate(entry, remote)) continue;
-        saveOps.push({
-          alias,
-          args: { id: entry.anilistEntryId, ...mangaArgs },
-          isCreate: false,
-          localEntryId: null,
-          mediaType: "manga",
-        });
-      } else if (entry.manga.anilistId != null) {
-        // Stale entry ID — not found on remote; recreate by mediaId
-        saveOps.push({
-          alias,
-          args: { mediaId: entry.manga.anilistId, ...mangaArgs },
-          isCreate: true,
-          localEntryId: entry.id,
-          mediaType: "manga",
-        });
+
+    // Match by mediaId first, then fall back to malId
+    let remote: AniListRemoteEntry | undefined;
+    if (entry.manga.anilistId != null) {
+      remote = remoteMangaMap.get(entry.manga.anilistId);
+      if (remote) remoteMangaMap.delete(entry.manga.anilistId);
+    }
+    if (!remote && entry.manga.malId) {
+      const mediaId = malIdToMangaEntry.get(entry.manga.malId);
+      if (mediaId !== undefined) {
+        remote = remoteMangaMap.get(mediaId);
+        if (remote) remoteMangaMap.delete(mediaId);
       }
-    } else if (entry.manga.anilistId != null) {
+    }
+
+    if (remote) {
+      mangaMatched++;
+      if (
+        !anilistMangaNeedsUpdate(
+          { ...entry, title: entry.manga.titleEn },
+          remote,
+        )
+      )
+        continue;
+
+      console.info(
+        `[AniList Push Trace] manga "${entry.manga.titleEn}" -> UPDATE`,
+      );
+
+      // Use remote's chapter count for validation (AniList is authoritative for their API)
+      remoteChapterCount = remote.chapters ?? null;
+      if (remoteChapterCount) {
+        clampedProgress = Math.min(entry.progress, remoteChapterCount);
+        mangaArgs.progress = clampedProgress;
+
+        if (clampedProgress !== entry.progress) {
+          const localCount = entry.manga.chapterCount;
+          if (
+            localCount &&
+            remoteChapterCount &&
+            localCount !== remoteChapterCount
+          ) {
+            console.warn(
+              `[AniList Push] Chapter count mismatch for ${entry.manga.titleEn}: local=${localCount}, AniList=${remoteChapterCount}. Clamping progress from ${entry.progress} to ${clampedProgress}`,
+            );
+          } else {
+            console.warn(
+              `[AniList Push] Clamping manga progress: ${entry.manga.titleEn} (${entry.id}) from ${entry.progress} to ${clampedProgress} (chapters: ${remoteChapterCount})`,
+            );
+          }
+        }
+      }
+
       saveOps.push({
         alias,
-        args: { mediaId: entry.manga.anilistId, ...mangaArgs },
+        args: { id: remote.entryId, ...mangaArgs },
+        isCreate: false,
+        localEntryId: null,
+        mediaType: "manga",
+        title: entry.manga.titleEn,
+        malId: entry.manga.malId,
+      });
+    } else if (entry.manga.anilistId != null) {
+      console.info(
+        `[AniList Push Trace] manga "${entry.manga.titleEn}" -> CREATE`,
+      );
+      // Clamp progress based on local chapter count
+      if (entry.manga.chapterCount) {
+        clampedProgress = Math.min(entry.progress, entry.manga.chapterCount);
+        mangaArgs.progress = clampedProgress;
+
+        if (clampedProgress !== entry.progress) {
+          console.warn(
+            `[AniList Push] Clamping manga progress on create: ${entry.manga.titleEn} (${entry.id}) from ${entry.progress} to ${clampedProgress} (chapters: ${entry.manga.chapterCount})`,
+          );
+        }
+      }
+
+      saveOps.push({
+        alias,
+        args: {
+          mediaId: entry.manga.anilistId,
+          malId: entry.manga.malId ?? undefined,
+          ...mangaArgs,
+        },
         isCreate: true,
         localEntryId: entry.id,
+        mediaRecordId: entry.manga.id,
         mediaType: "manga",
+        title: entry.manga.titleEn,
+        malId: entry.manga.malId,
       });
     }
   }
 
-  for (const [entryId, { title }] of remoteAnimeMap) {
+  for (const [, remote] of remoteAnimeMap) {
     deleteOps.push({
       alias: `d${deleteOps.length}`,
-      entryId,
-      title,
+      entryId: remote.entryId,
+      title: remote.title,
       mediaType: "anime",
     });
   }
-  for (const [entryId, { title }] of remoteMangaMap) {
+  for (const [, remote] of remoteMangaMap) {
     deleteOps.push({
       alias: `d${deleteOps.length}`,
-      entryId,
-      title,
+      entryId: remote.entryId,
+      title: remote.title,
       mediaType: "manga",
     });
   }
+
+  // Count save operations by type for logging
+  const animeUpdateOps = saveOps.filter(
+    (op) => op.mediaType === "anime" && !op.isCreate,
+  );
+  const animeCreateOps = saveOps.filter(
+    (op) => op.mediaType === "anime" && op.isCreate,
+  );
+  const mangaUpdateOps = saveOps.filter(
+    (op) => op.mediaType === "manga" && !op.isCreate,
+  );
+  const mangaCreateOps = saveOps.filter(
+    (op) => op.mediaType === "manga" && op.isCreate,
+  );
+  const animeDeleteOps = deleteOps.filter((op) => op.mediaType === "anime");
+  const mangaDeleteOps = deleteOps.filter((op) => op.mediaType === "manga");
+
+  console.log(
+    `[AniList Push] Anime: ${animeUpdateOps.length} updates, ${animeCreateOps.length} creates, ${animeDeleteOps.length} deletes`,
+  );
+  console.log(
+    `[AniList Push] Manga: ${mangaUpdateOps.length} updates, ${mangaCreateOps.length} creates, ${mangaDeleteOps.length} deletes`,
+  );
 
   // ── Phase 3: Execute in batches ───────────────────────────────────────────
 
@@ -860,8 +1542,28 @@ export async function pushAniList(logId: string): Promise<void> {
       result = await batchAniListMutation(query, variables, accessToken);
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
-      if (errMsg.includes("AniList HTTP 400") && chunk.length > 1) {
+
+      // Log batch details on validation error
+      if (errMsg.includes("validation")) {
+        const batchDesc = chunk
+          .map(
+            (op) =>
+              `${op.title} (${op.mediaType}:${op.isCreate ? "create" : "update"})`,
+          )
+          .join("; ");
+        console.error(`[AniList Push] Validation error in batch: ${batchDesc}`);
+      }
+
+      // Retry individually for validation/400 issues (including single-op chunks).
+      if (
+        errMsg.includes("AniList HTTP 400") ||
+        errMsg.includes("validation") ||
+        errMsg.includes("[VALIDATION:")
+      ) {
         // Retry individually to isolate bad entries without losing the whole chunk
+        console.info(
+          `[AniList Push] Retrying ${chunk.length} entries individually...`,
+        );
         for (const op of chunk) {
           const { query: q, variables: v } = buildSaveBatch([
             { ...op, alias: "s0" },
@@ -870,45 +1572,164 @@ export async function pushAniList(logId: string): Promise<void> {
             const r = await batchAniListMutation(q, v, accessToken);
             result[op.alias] = (r as Record<string, unknown>).s0;
           } catch (ie) {
-            errors.push(`save ${op.alias}: ${extractErrorMessage(ie)}`);
-            result[op.alias] = null;
+            const iMsg = ie instanceof Error ? ie.message : String(ie);
+            const opDesc = `${op.title} (${op.mediaType}:${op.isCreate ? "create" : "update"}, id:${op.args.id ?? op.args.mediaId})`;
+            console.error(
+              `[AniList Push] Failed: ${opDesc} — ${extractErrorMessage(ie)}`,
+            );
+
+            // Try to recover invalid mediaId using malId
+            if (iMsg.includes("[VALIDATION:mediaId]")) {
+              console.error(`[AniList Push] Invalid mediaId for "${op.title}"`);
+              console.error(`  AniList ID (mediaId): ${op.args.mediaId}`);
+              console.error(
+                `  MAL ID (malId): ${op.malId ?? op.args.malId ?? "none"}`,
+              );
+
+              const malId = op.malId ?? op.args.malId;
+              if (malId) {
+                console.info(
+                  `[AniList Push] Attempting recovery: looking up correct mediaId via malId ${malId}...`,
+                );
+                const correctedMediaId = await getMediaIdByMalId(
+                  malId,
+                  op.mediaType === "anime" ? "ANIME" : "MANGA",
+                  accessToken,
+                );
+
+                if (correctedMediaId && correctedMediaId !== op.args.mediaId) {
+                  console.info(
+                    `[AniList Push] Found correct mediaId for "${op.title}": ${correctedMediaId} (was ${op.args.mediaId})`,
+                  );
+
+                  // Update the local record with correct anilistId
+                  try {
+                    if (op.mediaType === "anime") {
+                      await prisma.anime.update({
+                        where: { id: op.mediaRecordId },
+                        data: { anilistId: correctedMediaId },
+                      });
+                    } else {
+                      await prisma.manga.update({
+                        where: { id: op.mediaRecordId },
+                        data: { anilistId: correctedMediaId },
+                      });
+                    }
+                    console.warn(
+                      `[AniList] Updated anilistId to ${correctedMediaId} for ${op.mediaType} ${op.mediaRecordId}`,
+                    );
+
+                    // Retry with corrected mediaId
+                    const correctedOp = {
+                      ...op,
+                      args: { ...op.args, mediaId: correctedMediaId },
+                    };
+                    const { query: retryQ, variables: retryV } = buildSaveBatch(
+                      [{ ...correctedOp, alias: "s0" }],
+                    );
+                    try {
+                      const retryR = await batchAniListMutation(
+                        retryQ,
+                        retryV,
+                        accessToken,
+                      );
+                      result[op.alias] = (retryR as Record<string, unknown>).s0;
+                      console.info(
+                        `[AniList Push] Retry succeeded for "${op.title}" with corrected mediaId`,
+                      );
+                    } catch (retryErr) {
+                      console.error(
+                        `[AniList Push] Retry failed even with corrected mediaId:`,
+                        extractErrorMessage(retryErr),
+                      );
+                      errors.push(
+                        `save ${op.alias} (recovered attempt): ${extractErrorMessage(retryErr)}`,
+                      );
+                      result[op.alias] = null;
+                    }
+                  } catch (updateErr) {
+                    console.error(
+                      `[AniList] Failed to update anilistId:`,
+                      extractErrorMessage(updateErr),
+                    );
+                    errors.push(
+                      `update anilistId: ${extractErrorMessage(updateErr)}`,
+                    );
+                  }
+                } else {
+                  if (correctedMediaId === op.args.mediaId) {
+                    console.warn(
+                      `[AniList Push] MAL lookup for "${op.title}" returned the same mediaId (${op.args.mediaId}); skipping this entry for now.`,
+                    );
+                  } else {
+                    console.warn(
+                      `[AniList Push] Could not resolve AniList mediaId via malId ${malId} for "${op.title}"; skipping this entry for now.`,
+                    );
+                  }
+                  // Graceful skip: do not register as sync error when MAL recovery cannot resolve.
+                  result[op.alias] = null;
+                }
+              } else {
+                // No malId available; skip this op and keep local ids unchanged.
+                console.warn(
+                  `[AniList Push] No malId available to attempt recovery`,
+                );
+                errors.push(
+                  `save ${op.alias} (${opDesc}): ${extractErrorMessage(ie)}`,
+                );
+                result[op.alias] = null;
+              }
+            } else {
+              // Non-mediaId error
+              errors.push(
+                `save ${op.alias} (${opDesc}): ${extractErrorMessage(ie)}`,
+              );
+              result[op.alias] = null;
+            }
           }
         }
       } else {
-        errors.push(
-          `save batch ${i / PUSH_CHUNK_SIZE + 1}: ${extractErrorMessage(e)}`,
+        const batchDesc = chunk
+          .map(
+            (op) =>
+              `${op.title} (${op.mediaType}:${op.isCreate ? "create" : "update"})`,
+          )
+          .join("; ");
+        const batchNum = Math.floor(i / PUSH_CHUNK_SIZE) + 1;
+        console.error(
+          `[AniList Push] Batch ${batchNum} failed (${chunk.length} entries): ${batchDesc}`,
         );
+        errors.push(`save batch ${batchNum}: ${extractErrorMessage(e)}`);
         continue;
       }
     }
 
     const dbUpdates: Promise<unknown>[] = [];
     for (const op of chunk) {
+      const saveResult = result[op.alias] as { id?: number } | null | undefined;
+      if (saveResult?.id == null) continue;
+
       if (op.isCreate && op.localEntryId) {
-        const newId = (result[op.alias] as { id?: number } | null)?.id;
-        if (newId != null) {
-          if (op.mediaType === "anime") {
-            dbUpdates.push(
-              prisma.animeListEntry.update({
-                where: { id: op.localEntryId },
-                data: { anilistEntryId: newId },
-              }),
-            );
-          } else {
-            dbUpdates.push(
-              prisma.mangaListEntry.update({
-                where: { id: op.localEntryId },
-                data: { anilistEntryId: newId },
-              }),
-            );
-          }
+        const newId = saveResult.id;
+        if (op.mediaType === "anime") {
+          dbUpdates.push(
+            prisma.animeListEntry.update({
+              where: { id: op.localEntryId },
+              data: { anilistEntryId: newId },
+            }),
+          );
+        } else {
+          dbUpdates.push(
+            prisma.mangaListEntry.update({
+              where: { id: op.localEntryId },
+              data: { anilistEntryId: newId },
+            }),
+          );
         }
       }
       if (op.mediaType === "anime") {
-        animeSynced++;
         animeChanged++;
       } else {
-        mangaSynced++;
         mangaChanged++;
       }
     }
@@ -935,18 +1756,24 @@ export async function pushAniList(logId: string): Promise<void> {
     }
   }
 
-  const total = animeSynced + mangaSynced;
+  const total = animeMatched + mangaMatched;
   const changed = animeChanged + mangaChanged;
   console.log(
-    `[AniList Push] Synced ${total} entries (${changed} changed, ${deletions.length} deleted): ${animeSynced} anime, ${mangaSynced} manga`,
+    `[AniList Push] Anime: ${animeMatched} matched (${animeChanged} changed)`,
+  );
+  console.log(
+    `[AniList Push] Manga: ${mangaMatched} matched (${mangaChanged} changed)`,
+  );
+  console.log(
+    `[AniList Push] Matched ${total} entries (${changed} changed, ${deletions.length} deleted): ${animeMatched} anime, ${mangaMatched} manga`,
   );
 
   await prisma.syncLog.update({
     where: { id: logId },
     data: {
       status: errors.length ? "FAILED" : "COMPLETED",
-      animeSynced,
-      mangaSynced,
+      animeSynced: animeMatched,
+      mangaSynced: mangaMatched,
       animeChanged,
       mangaChanged,
       errors,

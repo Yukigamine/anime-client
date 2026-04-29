@@ -144,6 +144,7 @@ export default function MangaListClient({
       {isPending ? (
         <Grid container spacing={2}>
           {Array.from({ length: 4 }).map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list
             <Grid key={i} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
               <CardSkeleton />
             </Grid>

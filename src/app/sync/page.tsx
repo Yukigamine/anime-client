@@ -10,10 +10,6 @@ export default function SyncPage() {
       <Typography variant="h4" gutterBottom sx={{ fontWeight: 700 }}>
         Sync
       </Typography>
-      <Typography color="text.secondary" sx={{ mb: 4 }}>
-        Pull imports the latest data from Kitsu or AniList into your local
-        database. Push writes your local changes back to the provider.
-      </Typography>
       <SyncDashboard />
     </Container>
   );

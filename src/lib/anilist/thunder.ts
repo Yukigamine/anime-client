@@ -24,6 +24,12 @@ export const anilistThunder = Thunder(async (query, variables) => {
       next: { revalidate: 0 },
     } as RequestInit);
 
+    // Check for Cloudflare challenge
+    if (res.headers.get("cf-mitigated") === "challenge") {
+      console.error(`[AniList Thunder] Cloudflare challenge detected`);
+      throw new Error("AniList blocked by Cloudflare challenge");
+    }
+
     if (res.status === 429) {
       const raw = res.headers.get("Retry-After");
       const parsed = raw != null ? parseInt(raw, 10) : Number.NaN;
@@ -36,15 +42,41 @@ export const anilistThunder = Thunder(async (query, variables) => {
       continue;
     }
 
-    if (!res.ok) throw new Error(`AniList HTTP ${res.status}`);
+    if (!res.ok) {
+      const text = await res.text().catch(() => "(unreadable)");
+
+      // Try to parse as JSON to extract GraphQL error messages
+      let body: { errors?: { message: string }[] } | null = null;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        // Not JSON, will handle as raw text
+      }
+
+      // Prioritize GraphQL error messages if available
+      if (body?.errors?.length) {
+        const errorMsg = body.errors.map((e) => e.message).join("; ");
+        console.error(`[AniList] API Error: ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
+
+      // No GraphQL error message, just log HTTP status
+      console.error(`[AniList] HTTP ${res.status}`);
+      throw new Error(`AniList HTTP ${res.status}`);
+    }
 
     const body = (await res.json()) as {
       data?: unknown;
       errors?: { message: string }[];
     };
-    if (body.errors?.length)
-      throw new Error(body.errors.map((e) => e.message).join("; "));
-    if (!body.data) throw new Error("AniList GraphQL returned no data");
+    if (body.errors?.length) {
+      const errorMsg = body.errors.map((e) => e.message).join("; ");
+      console.error(`[AniList] API Error: ${errorMsg}`);
+      throw new Error(errorMsg);
+    }
+    if (!body.data) {
+      throw new Error("AniList GraphQL returned no data");
+    }
     return body.data;
   }
 

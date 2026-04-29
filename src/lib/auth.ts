@@ -16,7 +16,7 @@ const COOKIE_NAMES: Record<Provider, string> = {
   ANILIST: "anilist_access_token",
 };
 
-export interface TokenInfo {
+interface TokenInfo {
   accessToken: string;
   refreshToken?: string | null;
   expiresAt?: Date | null;

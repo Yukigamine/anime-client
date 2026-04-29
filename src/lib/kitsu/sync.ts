@@ -1,13 +1,20 @@
 import "server-only";
 import { ReadStatus, ShowStatus, WatchStatus } from "@/generated/prisma/client";
 import { getToken } from "@/lib/auth";
+import { ensureValidKitsuToken } from "@/lib/kitsu/auth";
+import { kitsuFetch } from "@/lib/kitsu/stealth";
 import prisma from "@/lib/prisma";
+import {
+  validateAnimeListEntry,
+  validateMangaListEntry,
+  validateMediaRecord,
+} from "@/lib/validation";
 import {
   type GraphQLTypes,
   LibraryEntryStatusEnum,
   MappingExternalSiteEnum,
 } from "@/lib/zeus/kitsu";
-import { kitsuThunder, kitsuThunderAuth } from "./thunder";
+import { kitsuThunder } from "./thunder";
 
 function extractErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) return String(error);
@@ -106,6 +113,35 @@ type KitsuAllPage = NonNullable<
 type KitsuLibraryNode = NonNullable<KitsuAllPage["nodes"]>[number];
 type KitsuMedia = NonNullable<KitsuLibraryNode["media"]>;
 
+// Helper to fetch media details by ID and type to get episode/chapter count
+async function fetchKitsuMediaDetails(
+  mediaId: string,
+  type: "ANIME" | "MANGA",
+): Promise<{
+  episodeCount?: number | null;
+  chapterCount?: number | null;
+} | null> {
+  try {
+    const result = await kitsuThunder("query")({
+      findMediaByIdAndType: [
+        { id: mediaId, mediaType: type as GraphQLTypes["MediaTypeEnum"] },
+        {
+          id: true,
+          "...on Anime": { episodeCount: true },
+          "...on Manga": { chapterCount: true },
+        },
+      ],
+    });
+    return result.findMediaByIdAndType ?? null;
+  } catch (e) {
+    console.error(
+      `Failed to fetch Kitsu media ${mediaId}:`,
+      e instanceof Error ? e.message : String(e),
+    );
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Field-mapping helpers
 // ---------------------------------------------------------------------------
@@ -189,13 +225,17 @@ function mapShowStatus(s: string | null | undefined): ShowStatus {
   }
 }
 
-// GraphQL rating is 0-20; DB stores 0-10
+// DB now uses 0-20 scale (matching Kitsu)
+// For Kitsu API: must be Int (no decimals), range 2-20 (minimum 2), or null to unset
 function toRating(rating: number | null | undefined): number | null {
-  return rating != null ? rating / 2 : null;
+  return rating ?? null;
 }
 
 function toKitsuRating(rating: number | null): number | null {
-  return rating !== null ? Math.round(rating * 2) : null;
+  if (rating == null || rating === 0) return null;
+  // Round to integer and clamp to 2-20 range (Kitsu enforces minimum of 2)
+  const rounded = Math.round(rating);
+  return Math.max(2, Math.min(20, rounded));
 }
 
 function posterUrl(media: KitsuMedia): string | null {
@@ -273,6 +313,37 @@ async function pullAnimeEntry(node: KitsuLibraryNode): Promise<boolean> {
   if (!media) return false;
   const titles = titlesFrom(media.titles);
   const { anilistId, malId } = extractExternalIds(media);
+
+  // Validate media data before processing
+  const mediaIssues = validateMediaRecord({
+    anilistId,
+    malId,
+    titleEn: titles.titleEn,
+  });
+  if (mediaIssues.length > 0) {
+    console.warn(
+      `[Kitsu Pull] Skipping invalid anime ${media.id}: ${mediaIssues.join(", ")}`,
+    );
+    return false;
+  }
+
+  // Validate entry data (convert Kitsu rating from 0-20 to 0-10 scale first)
+  const entryIssues = validateAnimeListEntry({
+    progress: node.progress ?? 0,
+    rating: toRating(node.rating) ?? null,
+    rewatchCount: node.reconsumeCount ?? 0,
+  });
+  if (entryIssues.length > 0) {
+    const convertedRating = toRating(node.rating);
+    console.warn(
+      `[Kitsu Pull] Skipping invalid anime entry for "${titles.titleEn}" (${media.id}): ${entryIssues.join(", ")}`,
+    );
+    console.warn(
+      `  Raw rating from Kitsu: ${node.rating}, Converted to DB: ${convertedRating}, Progress: ${node.progress}, Rewatch count: ${node.reconsumeCount}`,
+    );
+    return false;
+  }
+
   const kitsuUpdatedAt = node.updatedAt
     ? new Date(node.updatedAt as string)
     : new Date();
@@ -309,9 +380,15 @@ async function pullAnimeEntry(node: KitsuLibraryNode): Promise<boolean> {
   }
 
   if (animeRecord) {
+    // Preserve existing anilistId; don't overwrite with stale Kitsu value
+    const updateData = { ...sharedMedia };
+    if (animeRecord.anilistId) {
+      delete updateData.anilistId;
+    }
+
     animeRecord = await prisma.anime.update({
       where: { id: animeRecord.id },
-      data: sharedMedia,
+      data: updateData,
     });
   } else {
     animeRecord = await prisma.anime.create({ data: sharedMedia });
@@ -371,6 +448,38 @@ async function pullMangaEntry(node: KitsuLibraryNode): Promise<boolean> {
     volumeCount?: number | null;
   } & KitsuMedia;
   const { anilistId, malId } = extractExternalIds(media);
+
+  // Validate media data before processing
+  const mediaIssues = validateMediaRecord({
+    anilistId,
+    malId,
+    titleEn: titles.titleEn,
+  });
+  if (mediaIssues.length > 0) {
+    console.warn(
+      `[Kitsu Pull] Skipping invalid manga ${media.id}: ${mediaIssues.join(", ")}`,
+    );
+    return false;
+  }
+
+  // Validate entry data (convert Kitsu rating from 0-20 to 0-10 scale first)
+  const entryIssues = validateMangaListEntry({
+    progress: node.progress ?? 0,
+    progressVolumes: 0,
+    rating: toRating(node.rating) ?? null,
+    rereadCount: node.reconsumeCount ?? 0,
+  });
+  if (entryIssues.length > 0) {
+    const convertedRating = toRating(node.rating);
+    console.warn(
+      `[Kitsu Pull] Skipping invalid manga entry for "${titles.titleEn}" (${media.id}): ${entryIssues.join(", ")}`,
+    );
+    console.warn(
+      `  Raw rating from Kitsu: ${node.rating}, Converted to DB: ${convertedRating}, Progress: ${node.progress}, Reread count: ${node.reconsumeCount}`,
+    );
+    return false;
+  }
+
   const kitsuUpdatedAt = node.updatedAt
     ? new Date(node.updatedAt as string)
     : new Date();
@@ -406,9 +515,15 @@ async function pullMangaEntry(node: KitsuLibraryNode): Promise<boolean> {
   }
 
   if (mangaRecord) {
+    // Preserve existing anilistId; don't overwrite with stale Kitsu value
+    const updateData = { ...sharedMedia };
+    if (mangaRecord.anilistId) {
+      delete updateData.anilistId;
+    }
+
     mangaRecord = await prisma.manga.update({
       where: { id: mangaRecord.id },
-      data: sharedMedia,
+      data: updateData,
     });
   } else {
     mangaRecord = await prisma.manga.create({ data: sharedMedia });
@@ -475,7 +590,7 @@ async function fetchLibraryPages(
 
   try {
     do {
-      let result;
+      let result: KitsuLibraryResult | undefined;
       try {
         result = await queryKitsuLibrary(slug, type, cursor ?? undefined);
       } catch (e) {
@@ -576,6 +691,8 @@ export async function pullKitsu(logId: string): Promise<void> {
 }
 
 type KitsuRemoteEntry = {
+  entryId: string;
+  mediaId: string;
   title: string;
   status: string | null | undefined;
   progress: number | null | undefined;
@@ -584,6 +701,9 @@ type KitsuRemoteEntry = {
   reconsumeCount: number | null | undefined;
   reconsuming: boolean | null | undefined;
   private: boolean | null | undefined;
+  malId?: number | null;
+  episodeCount?: number | null;
+  chapterCount?: number | null;
 };
 
 async function scanKitsuIds(
@@ -593,7 +713,7 @@ async function scanKitsuIds(
   const map = new Map<string, KitsuRemoteEntry>();
   let cursor: string | null = null;
   do {
-    let result;
+    let result: Awaited<ReturnType<typeof queryKitsuLibrary>> | undefined;
     try {
       result = await queryKitsuLibrary(slug, type, cursor ?? undefined);
     } catch {
@@ -602,14 +722,34 @@ async function scanKitsuIds(
     const page = result.findProfileBySlug?.library?.all;
     if (!page) break;
     for (const node of page.nodes ?? []) {
-      if (!node.id) continue;
+      if (!node.id || !node.media?.id) continue;
       const titles = node.media?.titles;
       const title =
         titles?.translated ??
         titles?.canonical ??
         titles?.romanized ??
         String(node.id);
-      map.set(node.id as string, {
+
+      // Extract malId from media mappings
+      const mappings = (
+        node.media as {
+          mappings?: { nodes?: KitsuMappingNode[] | null } | null;
+        }
+      ).mappings;
+      const malId = (mappings?.nodes ?? []).find(
+        (m) =>
+          m.externalSite === MappingExternalSiteEnum.MYANIMELIST_ANIME ||
+          m.externalSite === MappingExternalSiteEnum.MYANIMELIST_MANGA,
+      )?.externalId;
+
+      const typedNode = node.media as {
+        episodeCount?: number | null;
+        chapterCount?: number | null;
+      } & KitsuMedia;
+
+      map.set(node.media.id as string, {
+        entryId: node.id as string,
+        mediaId: node.media.id as string,
         title: title as string,
         status: node.status as string | null | undefined,
         progress: node.progress,
@@ -618,6 +758,9 @@ async function scanKitsuIds(
         reconsumeCount: node.reconsumeCount,
         reconsuming: node.reconsuming,
         private: node.private,
+        malId: malId ? parseInt(malId, 10) : null,
+        episodeCount: typedNode.episodeCount,
+        chapterCount: typedNode.chapterCount,
       });
     }
     cursor = page.pageInfo?.hasNextPage
@@ -639,15 +782,54 @@ function kitsuAnimeNeedsUpdate(
   },
   remote: KitsuRemoteEntry,
 ): boolean {
-  return (
-    mapWatchStatus(remote.status) !== local.watchStatus ||
-    (remote.progress ?? 0) !== local.progress ||
-    toRating(remote.rating) !== local.rating ||
-    (remote.notes || null) !== local.notes ||
-    (remote.reconsumeCount ?? 0) !== local.rewatchCount ||
-    (remote.reconsuming ?? false) !== local.rewatching ||
-    (remote.private ?? false) !== local.private
-  );
+  const watchStatusDiff = mapWatchStatus(remote.status) !== local.watchStatus;
+  const progressDiff = (remote.progress ?? 0) !== local.progress;
+  // Compare normalized ratings: convert local to Kitsu format for comparison
+  const ratingDiff = toRating(remote.rating) !== toKitsuRating(local.rating);
+  const notesDiff = (remote.notes || null) !== (local.notes || null);
+  const rewatchDiff = (remote.reconsumeCount ?? 0) !== local.rewatchCount;
+  const rewatchingDiff = (remote.reconsuming ?? false) !== local.rewatching;
+  const privateDiff = (remote.private ?? false) !== local.private;
+
+  const needsUpdate =
+    watchStatusDiff ||
+    progressDiff ||
+    ratingDiff ||
+    notesDiff ||
+    rewatchDiff ||
+    rewatchingDiff ||
+    privateDiff;
+
+  if (needsUpdate) {
+    const diffs = [];
+    if (watchStatusDiff)
+      diffs.push(
+        `watchStatus: ${mapWatchStatus(remote.status)} vs ${local.watchStatus}`,
+      );
+    if (progressDiff)
+      diffs.push(`progress: ${remote.progress} vs ${local.progress}`);
+    if (ratingDiff)
+      diffs.push(
+        `rating: ${toRating(remote.rating)} vs ${toKitsuRating(local.rating)} (local raw: ${local.rating})`,
+      );
+    if (notesDiff)
+      diffs.push(
+        `notes: "${remote.notes || null}" vs "${local.notes || null}"`,
+      );
+    if (rewatchDiff)
+      diffs.push(
+        `rewatchCount: ${remote.reconsumeCount} vs ${local.rewatchCount}`,
+      );
+    if (rewatchingDiff)
+      diffs.push(`rewatching: ${remote.reconsuming} vs ${local.rewatching}`);
+    if (privateDiff)
+      diffs.push(`private: ${remote.private} vs ${local.private}`);
+    console.log(
+      `[Kitsu Push] Anime needs update (${remote.title}): ${diffs.join(", ")}`,
+    );
+  }
+
+  return needsUpdate;
 }
 
 function kitsuMangaNeedsUpdate(
@@ -662,28 +844,236 @@ function kitsuMangaNeedsUpdate(
   },
   remote: KitsuRemoteEntry,
 ): boolean {
-  return (
-    mapReadStatus(remote.status) !== local.readStatus ||
-    (remote.progress ?? 0) !== local.progress ||
-    toRating(remote.rating) !== local.rating ||
-    (remote.notes || null) !== local.notes ||
-    (remote.reconsumeCount ?? 0) !== local.rereadCount ||
-    (remote.reconsuming ?? false) !== local.rereading ||
-    (remote.private ?? false) !== local.private
+  const readStatusDiff = mapReadStatus(remote.status) !== local.readStatus;
+  const progressDiff = (remote.progress ?? 0) !== local.progress;
+  // Compare normalized ratings: convert local to Kitsu format for comparison
+  const ratingDiff = toRating(remote.rating) !== toKitsuRating(local.rating);
+  const notesDiff = (remote.notes || null) !== (local.notes || null);
+  const rereadDiff = (remote.reconsumeCount ?? 0) !== local.rereadCount;
+  const rereadingDiff = (remote.reconsuming ?? false) !== local.rereading;
+  const privateDiff = (remote.private ?? false) !== local.private;
+
+  const needsUpdate =
+    readStatusDiff ||
+    progressDiff ||
+    ratingDiff ||
+    notesDiff ||
+    rereadDiff ||
+    rereadingDiff ||
+    privateDiff;
+
+  if (needsUpdate) {
+    const diffs = [];
+    if (readStatusDiff)
+      diffs.push(
+        `readStatus: ${mapReadStatus(remote.status)} vs ${local.readStatus}`,
+      );
+    if (progressDiff)
+      diffs.push(`progress: ${remote.progress} vs ${local.progress}`);
+    if (ratingDiff)
+      diffs.push(
+        `rating: ${toRating(remote.rating)} vs ${toKitsuRating(local.rating)} (local raw: ${local.rating})`,
+      );
+    if (notesDiff)
+      diffs.push(
+        `notes: "${remote.notes || null}" vs "${local.notes || null}"`,
+      );
+    if (rereadDiff)
+      diffs.push(
+        `rereadCount: ${remote.reconsumeCount} vs ${local.rereadCount}`,
+      );
+    if (rereadingDiff)
+      diffs.push(`rereading: ${remote.reconsuming} vs ${local.rereading}`);
+    if (privateDiff)
+      diffs.push(`private: ${remote.private} vs ${local.private}`);
+    console.log(
+      `[Kitsu Push] Manga needs update (${remote.title}): ${diffs.join(", ")}`,
+    );
+  }
+
+  return needsUpdate;
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Batch mutations for Kitsu push
+// ────────────────────────────────────────────────────────────────────────────
+
+const KITSU_API_URL =
+  process.env.KITSU_API_URL ?? "https://kitsu.io/api/graphql";
+const KITSU_BATCH_SIZE = 10;
+
+interface KitsuUpdateOp {
+  alias: string;
+  entryId: string;
+  input: {
+    notes: string;
+    private: boolean;
+    progress: number;
+    rating: number | null;
+    reconsumeCount: number;
+    reconsuming: boolean;
+    status: string;
+  };
+}
+
+interface KitsuCreateOp {
+  alias: string;
+  mediaId: string;
+  input: {
+    mediaType: string;
+    notes: string;
+    private: boolean;
+    progress: number;
+    rating: number | null;
+    reconsumeCount: number;
+    reconsuming: boolean;
+    status: string;
+  };
+}
+
+interface KitsuDeleteOp {
+  alias: string;
+  entryId: string;
+  title: string;
+}
+
+function toGraphQLValue(value: unknown): string {
+  if (value === null || value === undefined) return "null";
+  if (typeof value === "string") {
+    if (/^[A-Z_][A-Z0-9_]*$/.test(value)) {
+      return value;
+    }
+    return JSON.stringify(value);
+  }
+  if (typeof value === "number") return String(value);
+  if (typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) {
+    return `[${value.map(toGraphQLValue).join(", ")}]`;
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value)
+      .map(([k, v]) => `${k}: ${toGraphQLValue(v)}`)
+      .join(", ");
+    return `{${entries}}`;
+  }
+  return String(value);
+}
+
+function buildKitsuUpdateBatch(ops: KitsuUpdateOp[]): string {
+  const selections: string[] = [];
+
+  for (const op of ops) {
+    const inputStr = toGraphQLValue({
+      id: op.entryId,
+      ...op.input,
+    });
+    selections.push(
+      `${op.alias}: libraryEntry { update(input: ${inputStr}) { libraryEntry { id } errors { message } } }`,
+    );
+  }
+
+  return `mutation { ${selections.join(" ")} }`;
+}
+
+function buildKitsuCreateBatch(ops: KitsuCreateOp[]): string {
+  const selections: string[] = [];
+
+  for (const op of ops) {
+    const inputStr = toGraphQLValue({
+      mediaId: op.mediaId,
+      ...op.input,
+    });
+    selections.push(
+      `${op.alias}: libraryEntry { create(input: ${inputStr}) { libraryEntry { id } errors { message } } }`,
+    );
+  }
+
+  return `mutation { ${selections.join(" ")} }`;
+}
+
+function buildKitsuDeleteBatch(ops: KitsuDeleteOp[]): string {
+  const selections: string[] = [];
+
+  for (const op of ops) {
+    const inputStr = toGraphQLValue({ id: op.entryId });
+    selections.push(
+      `${op.alias}: libraryEntry { delete(input: ${inputStr}) { libraryEntry { id } } }`,
+    );
+  }
+
+  return `mutation { ${selections.join(" ")} }`;
+}
+
+async function batchKitsuMutation(
+  query: string,
+): Promise<Record<string, unknown>> {
+  const token = await ensureValidKitsuToken();
+  const body = JSON.stringify({ query });
+  const bodySize = Buffer.byteLength(body);
+  console.log(
+    `[Kitsu] Mutation: query ${query.length} chars, body ${bodySize} bytes`,
   );
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    Referer: "https://kitsu.app/",
+    "Cache-Control": "no-cache",
+    Pragma: "no-cache",
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await kitsuFetch(KITSU_API_URL, {
+    method: "POST",
+    headers,
+    body,
+  });
+
+  if (res.headers["cf-mitigated"] === "challenge") {
+    console.error(`[Kitsu] Cloudflare challenge detected`);
+    throw new Error("Kitsu blocked by Cloudflare challenge");
+  }
+
+  if (res.status < 200 || res.status >= 300) {
+    const text = res.body || "(unreadable)";
+    console.error(`[Kitsu] HTTP ${res.status}`);
+    console.error(`[Kitsu] Query:\n${query}`);
+    console.error(`[Kitsu] Response:\n${text}`);
+    throw new Error(`Kitsu HTTP ${res.status}`);
+  }
+
+  const responseBody = JSON.parse(res.body) as {
+    data?: Record<string, unknown>;
+    errors?: { message: string }[];
+  };
+  if (responseBody.errors?.length) {
+    console.error(`[Kitsu] GraphQL errors`);
+    console.error(`[Kitsu] Query:\n${query}`);
+    console.error(
+      `[Kitsu] Errors:\n${JSON.stringify(responseBody.errors, null, 2)}`,
+    );
+    throw new Error(responseBody.errors.map((e) => e.message).join("; "));
+  }
+  return responseBody.data ?? {};
 }
 
 export async function pushKitsu(logId: string): Promise<void> {
   const errors: string[] = [];
   const deletions: string[] = [];
-  let animeSynced = 0;
+  let animeMatched = 0;
   let animeChanged = 0;
-  let mangaSynced = 0;
+  let mangaMatched = 0;
   let mangaChanged = 0;
 
   try {
+    const accessToken = await ensureValidKitsuToken();
     const tokenInfo = await getToken("KITSU");
-    if (!tokenInfo?.accessToken || !tokenInfo.username) {
+    if (!accessToken || !tokenInfo?.username) {
       errors.push("Not logged in to Kitsu — cannot push");
     } else {
       const slug = tokenInfo.username;
@@ -694,106 +1084,263 @@ export async function pushKitsu(logId: string): Promise<void> {
         slug,
         "ANIME" as GraphQLTypes["MediaTypeEnum"],
       );
-
       const animeEntries = await prisma.animeListEntry.findMany({
         include: { anime: true },
       });
 
-      for (const entry of animeEntries) {
-        if (entry.kitsuEntryId) {
-          const remote = remoteAnimeMap.get(entry.kitsuEntryId);
-          remoteAnimeMap.delete(entry.kitsuEntryId);
-          if (remote && !kitsuAnimeNeedsUpdate(entry, remote)) continue;
-          try {
-            await kitsuThunderAuth("mutation")({
-              libraryEntry: {
-                update: [
-                  {
-                    input: {
-                      id: entry.kitsuEntryId,
-                      notes: entry.notes ?? "",
-                      private: entry.private,
-                      progress: entry.progress,
-                      rating: toKitsuRating(entry.rating),
-                      reconsumeCount: entry.rewatchCount,
-                      reconsuming: entry.rewatching,
-                      status: reverseWatchStatus(entry.watchStatus),
-                    },
-                  },
-                  { libraryEntry: { id: true } },
-                ],
-              },
-            });
-            animeSynced++;
-            animeChanged++;
-          } catch (e) {
-            console.error(
-              `Failed to push anime entry ${entry.kitsuEntryId}:`,
-              e,
-            );
-            errors.push(
-              `anime entry ${entry.kitsuEntryId}: ${extractErrorMessage(e)}`,
-            );
-          }
-        } else if (entry.anime.kitsuId) {
-          try {
-            const res = await kitsuThunderAuth("mutation")({
-              libraryEntry: {
-                create: [
-                  {
-                    input: {
-                      mediaId: entry.anime.kitsuId,
-                      mediaType: "ANIME" as GraphQLTypes["MediaTypeEnum"],
-                      status: reverseWatchStatus(entry.watchStatus),
-                      notes: entry.notes ?? undefined,
-                      private: entry.private,
-                      progress: entry.progress,
-                      rating: toKitsuRating(entry.rating) ?? undefined,
-                      reconsumeCount: entry.rewatchCount,
-                      reconsuming: entry.rewatching,
-                    },
-                  },
-                  { libraryEntry: { id: true } },
-                ],
-              },
-            });
-            const newId = res.libraryEntry?.create?.libraryEntry?.id as
-              | string
-              | undefined;
-            if (newId) {
-              await prisma.animeListEntry.update({
-                where: { id: entry.id },
-                data: { kitsuEntryId: newId },
-              });
-            }
-            animeSynced++;
-            animeChanged++;
-          } catch (e) {
-            console.error(`Failed to create anime ${entry.anime.kitsuId}:`, e);
-            errors.push(
-              `create anime ${entry.anime.kitsuId}: ${extractErrorMessage(e)}`,
-            );
-          }
+      // Log anime entries with missing or potentially invalid episode counts
+      const missingEpisodeCount = animeEntries.filter(
+        (e) => !e.anime.episodeCount,
+      );
+      if (missingEpisodeCount.length > 0) {
+        console.warn(
+          `[Kitsu Push] Found ${missingEpisodeCount.length} anime entries with null episodeCount (cannot validate progress):`,
+        );
+        for (const entry of missingEpisodeCount.slice(0, 10)) {
+          console.warn(
+            `  - ${entry.id}: progress=${entry.progress}, title="${entry.anime.titleEn}"`,
+          );
         }
       }
 
-      for (const [entryId, { title }] of remoteAnimeMap) {
-        try {
-          await kitsuThunderAuth("mutation")({
-            libraryEntry: {
-              delete: [
-                { input: { id: entryId } },
-                { libraryEntry: { id: true } },
-              ],
+      const invalidProgressAnime = animeEntries.filter(
+        (e) => e.anime.episodeCount && e.progress > e.anime.episodeCount,
+      );
+      if (invalidProgressAnime.length > 0) {
+        console.warn(
+          `[Kitsu Push] Found ${invalidProgressAnime.length} anime entries with progress > episodeCount:`,
+        );
+        for (const entry of invalidProgressAnime) {
+          console.warn(
+            `  - ${entry.id}: progress=${entry.progress}, episodes=${entry.anime.episodeCount}, title="${entry.anime.titleEn}"`,
+          );
+        }
+      }
+
+      const animeUpdateOps: KitsuUpdateOp[] = [];
+      const animeCreateOps: KitsuCreateOp[] = [];
+      const animeDeleteOps: KitsuDeleteOp[] = [];
+
+      for (const entry of animeEntries) {
+        // Validate entry before attempting sync
+        const entryIssues = validateAnimeListEntry(entry);
+        const mediaIssues = validateMediaRecord(entry.anime);
+        if (entryIssues.length > 0 || mediaIssues.length > 0) {
+          errors.push(
+            `anime entry ${entry.id}: ${[...entryIssues, ...mediaIssues].join(", ")}`,
+          );
+          continue;
+        }
+
+        // Look up remote entry by kitsuId, fall back to malId
+        let remote = entry.anime.kitsuId
+          ? remoteAnimeMap.get(entry.anime.kitsuId)
+          : null;
+        if (!remote && entry.anime.malId) {
+          // Try to find by malId
+          for (const r of remoteAnimeMap.values()) {
+            if (r.malId === entry.anime.malId) {
+              remote = r;
+              break;
+            }
+          }
+        }
+
+        if (remote) {
+          animeMatched++;
+          // Mark as seen so we don't delete it
+          remoteAnimeMap.delete(remote.mediaId);
+
+          // Use remote's episode count for validation (Kitsu is authoritative for their API)
+          const remoteEpisodeCount = remote.episodeCount;
+          const clampedProgress = remoteEpisodeCount
+            ? Math.min(entry.progress, remoteEpisodeCount)
+            : entry.progress;
+
+          if (
+            !kitsuAnimeNeedsUpdate(
+              { ...entry, progress: clampedProgress },
+              remote,
+            )
+          ) {
+            // No update needed, skip this entry
+            continue;
+          }
+
+          if (clampedProgress !== entry.progress) {
+            const localCount = entry.anime.episodeCount;
+            if (
+              localCount &&
+              remoteEpisodeCount &&
+              localCount !== remoteEpisodeCount
+            ) {
+              console.warn(
+                `[Kitsu Push] Episode count mismatch for ${entry.anime.titleEn}: local=${localCount}, Kitsu=${remoteEpisodeCount}. Clamping progress from ${entry.progress} to ${clampedProgress}`,
+              );
+            } else {
+              console.warn(
+                `[Kitsu Push] Clamping anime progress: ${entry.anime.titleEn} (${entry.id}) from ${entry.progress} to ${clampedProgress} (episodes: ${remoteEpisodeCount})`,
+              );
+            }
+          }
+
+          animeUpdateOps.push({
+            alias: `u${animeUpdateOps.length}`,
+            entryId: remote.entryId,
+            input: {
+              notes: entry.notes ?? "",
+              private: entry.private,
+              progress: clampedProgress,
+              rating: toKitsuRating(entry.rating),
+              reconsumeCount: entry.rewatchCount,
+              reconsuming: entry.rewatching,
+              status: reverseWatchStatus(entry.watchStatus),
             },
           });
-          const msg = `anime "${title}" (Kitsu entry ${entryId})`;
-          console.log(`[Kitsu Push] Deleted ${msg}`);
-          deletions.push(msg);
-          animeChanged++;
+        } else if (entry.anime.kitsuId) {
+          let episodeCount = entry.anime.episodeCount;
+          let _fetchedFromKitsu = false;
+
+          console.log(
+            `[Kitsu Push] Creating anime ${entry.anime.titleEn} (kitsuId=${entry.anime.kitsuId}): progress=${entry.progress}, local episodeCount=${episodeCount}`,
+          );
+
+          // Always fetch media details to validate before creating
+          if (entry.progress > 0) {
+            const mediaDetails = await fetchKitsuMediaDetails(
+              entry.anime.kitsuId,
+              "ANIME",
+            );
+            console.log(
+              `[Kitsu Push] Fetched media details for kitsuId=${entry.anime.kitsuId}: ${JSON.stringify(mediaDetails)}`,
+            );
+            if (mediaDetails?.episodeCount != null) {
+              const fetchedCount = mediaDetails.episodeCount;
+              if (episodeCount && episodeCount !== fetchedCount) {
+                console.warn(
+                  `[Kitsu Push] Episode count mismatch for ${entry.anime.titleEn}: local=${episodeCount}, Kitsu=${fetchedCount}`,
+                );
+              }
+              episodeCount = fetchedCount;
+              _fetchedFromKitsu = true;
+              // Update local database with the fetched episode count
+              if (!entry.anime.episodeCount) {
+                await prisma.anime.update({
+                  where: { id: entry.anime.id },
+                  data: { episodeCount },
+                });
+                console.log(
+                  `[Kitsu Push] Stored fetched episodeCount=${episodeCount} for ${entry.anime.titleEn}`,
+                );
+              }
+            } else {
+              console.warn(
+                `[Kitsu Push] Could not fetch episodeCount for ${entry.anime.titleEn} (kitsuId=${entry.anime.kitsuId})`,
+              );
+            }
+          }
+
+          const clampedProgress = episodeCount
+            ? Math.min(entry.progress, episodeCount)
+            : entry.progress;
+          console.log(
+            `[Kitsu Push] Final progress for ${entry.anime.titleEn}: ${entry.progress} -> ${clampedProgress} (episodeCount=${episodeCount})`,
+          );
+          if (clampedProgress !== entry.progress) {
+            console.warn(
+              `[Kitsu Push] Clamping anime progress on create: ${entry.anime.titleEn} (${entry.id}) from ${entry.progress} to ${clampedProgress}`,
+            );
+          }
+
+          animeCreateOps.push({
+            alias: `c${animeCreateOps.length}`,
+            mediaId: entry.anime.kitsuId,
+            input: {
+              mediaType: "ANIME",
+              notes: entry.notes ?? "",
+              private: entry.private,
+              progress: clampedProgress,
+              rating: toKitsuRating(entry.rating),
+              reconsumeCount: entry.rewatchCount,
+              reconsuming: entry.rewatching,
+              status: reverseWatchStatus(entry.watchStatus),
+            },
+          });
+        }
+      }
+
+      for (const { entryId, title } of remoteAnimeMap.values()) {
+        animeDeleteOps.push({
+          alias: `d${animeDeleteOps.length}`,
+          entryId,
+          title,
+        });
+      }
+
+      // Execute anime batches
+      console.log(
+        `[Kitsu Push] Anime: ${animeUpdateOps.length} updates, ${animeCreateOps.length} creates, ${animeDeleteOps.length} deletes`,
+      );
+      for (let i = 0; i < animeUpdateOps.length; i += KITSU_BATCH_SIZE) {
+        const batchNum = i / KITSU_BATCH_SIZE + 1;
+        const chunk = animeUpdateOps.slice(i, i + KITSU_BATCH_SIZE);
+        console.log(
+          `[Kitsu Push] Anime update batch ${batchNum} (${chunk.length} ops)...`,
+        );
+        const query = buildKitsuUpdateBatch(chunk);
+        try {
+          await batchKitsuMutation(query);
+          console.log(`[Kitsu Push] Anime update batch ${batchNum} completed`);
+          for (const _op of chunk) {
+            animeChanged++;
+          }
         } catch (e) {
           errors.push(
-            `delete anime entry ${entryId}: ${extractErrorMessage(e)}`,
+            `anime update batch ${batchNum}: ${extractErrorMessage(e)}`,
+          );
+        }
+      }
+
+      for (let i = 0; i < animeCreateOps.length; i += KITSU_BATCH_SIZE) {
+        const batchNum = i / KITSU_BATCH_SIZE + 1;
+        const chunk = animeCreateOps.slice(i, i + KITSU_BATCH_SIZE);
+        console.log(
+          `[Kitsu Push] Anime create batch ${batchNum} (${chunk.length} ops)...`,
+        );
+        const query = buildKitsuCreateBatch(chunk);
+        try {
+          await batchKitsuMutation(query);
+          console.log(`[Kitsu Push] Anime create batch ${batchNum} completed`);
+          for (const _op of chunk) {
+            animeMatched++;
+            animeChanged++;
+          }
+        } catch (e) {
+          errors.push(
+            `anime create batch ${batchNum}: ${extractErrorMessage(e)}`,
+          );
+        }
+      }
+
+      for (let i = 0; i < animeDeleteOps.length; i += KITSU_BATCH_SIZE) {
+        const batchNum = i / KITSU_BATCH_SIZE + 1;
+        const chunk = animeDeleteOps.slice(i, i + KITSU_BATCH_SIZE);
+        console.log(
+          `[Kitsu Push] Anime delete batch ${batchNum} (${chunk.length} ops)...`,
+        );
+        const query = buildKitsuDeleteBatch(chunk);
+        try {
+          await batchKitsuMutation(query);
+          console.log(`[Kitsu Push] Anime delete batch ${batchNum} completed`);
+          for (const op of chunk) {
+            const msg = `anime "${op.title}" (Kitsu entry ${op.entryId})`;
+            console.log(`[Kitsu Push] Deleted ${msg}`);
+            deletions.push(msg);
+            animeChanged++;
+          }
+        } catch (e) {
+          errors.push(
+            `anime delete batch ${batchNum}: ${extractErrorMessage(e)}`,
           );
         }
       }
@@ -804,106 +1351,255 @@ export async function pushKitsu(logId: string): Promise<void> {
         slug,
         "MANGA" as GraphQLTypes["MediaTypeEnum"],
       );
-
       const mangaEntries = await prisma.mangaListEntry.findMany({
         include: { manga: true },
       });
 
-      for (const entry of mangaEntries) {
-        if (entry.kitsuEntryId) {
-          const remote = remoteMangaMap.get(entry.kitsuEntryId);
-          remoteMangaMap.delete(entry.kitsuEntryId);
-          if (remote && !kitsuMangaNeedsUpdate(entry, remote)) continue;
-          try {
-            await kitsuThunderAuth("mutation")({
-              libraryEntry: {
-                update: [
-                  {
-                    input: {
-                      id: entry.kitsuEntryId,
-                      notes: entry.notes ?? "",
-                      private: entry.private,
-                      progress: entry.progress,
-                      rating: toKitsuRating(entry.rating),
-                      reconsumeCount: entry.rereadCount,
-                      reconsuming: entry.rereading,
-                      status: reverseReadStatus(entry.readStatus),
-                    },
-                  },
-                  { libraryEntry: { id: true } },
-                ],
-              },
-            });
-            mangaSynced++;
-            mangaChanged++;
-          } catch (e) {
-            console.error(
-              `Failed to push manga entry ${entry.kitsuEntryId}:`,
-              e,
-            );
-            errors.push(
-              `manga entry ${entry.kitsuEntryId}: ${extractErrorMessage(e)}`,
-            );
-          }
-        } else if (entry.manga.kitsuId) {
-          try {
-            const res = await kitsuThunderAuth("mutation")({
-              libraryEntry: {
-                create: [
-                  {
-                    input: {
-                      mediaId: entry.manga.kitsuId,
-                      mediaType: "MANGA" as GraphQLTypes["MediaTypeEnum"],
-                      status: reverseReadStatus(entry.readStatus),
-                      notes: entry.notes ?? undefined,
-                      private: entry.private,
-                      progress: entry.progress,
-                      rating: toKitsuRating(entry.rating) ?? undefined,
-                      reconsumeCount: entry.rereadCount,
-                      reconsuming: entry.rereading,
-                    },
-                  },
-                  { libraryEntry: { id: true } },
-                ],
-              },
-            });
-            const newId = res.libraryEntry?.create?.libraryEntry?.id as
-              | string
-              | undefined;
-            if (newId) {
-              await prisma.mangaListEntry.update({
-                where: { id: entry.id },
-                data: { kitsuEntryId: newId },
-              });
-            }
-            mangaSynced++;
-            mangaChanged++;
-          } catch (e) {
-            console.error(`Failed to create manga ${entry.manga.kitsuId}:`, e);
-            errors.push(
-              `create manga ${entry.manga.kitsuId}: ${extractErrorMessage(e)}`,
-            );
-          }
+      // Log manga entries with missing or potentially invalid chapter counts
+      const missingChapterCount = mangaEntries.filter(
+        (e) => !e.manga.chapterCount,
+      );
+      if (missingChapterCount.length > 0) {
+        console.warn(
+          `[Kitsu Push] Found ${missingChapterCount.length} manga entries with null chapterCount (cannot validate progress):`,
+        );
+        for (const entry of missingChapterCount.slice(0, 10)) {
+          console.warn(
+            `  - ${entry.id}: progress=${entry.progress}, title="${entry.manga.titleEn}"`,
+          );
         }
       }
 
-      for (const [entryId, { title }] of remoteMangaMap) {
-        try {
-          await kitsuThunderAuth("mutation")({
-            libraryEntry: {
-              delete: [
-                { input: { id: entryId } },
-                { libraryEntry: { id: true } },
-              ],
+      const invalidProgressManga = mangaEntries.filter(
+        (e) => e.manga.chapterCount && e.progress > e.manga.chapterCount,
+      );
+      if (invalidProgressManga.length > 0) {
+        console.warn(
+          `[Kitsu Push] Found ${invalidProgressManga.length} manga entries with progress > chapterCount:`,
+        );
+        for (const entry of invalidProgressManga) {
+          console.warn(
+            `  - ${entry.id}: progress=${entry.progress}, chapters=${entry.manga.chapterCount}, title="${entry.manga.titleEn}"`,
+          );
+        }
+      }
+
+      const mangaUpdateOps: KitsuUpdateOp[] = [];
+      const mangaCreateOps: KitsuCreateOp[] = [];
+      const mangaDeleteOps: KitsuDeleteOp[] = [];
+
+      for (const entry of mangaEntries) {
+        // Validate entry before attempting sync
+        const entryIssues = validateMangaListEntry(entry);
+        const mediaIssues = validateMediaRecord(entry.manga);
+        if (entryIssues.length > 0 || mediaIssues.length > 0) {
+          errors.push(
+            `manga entry ${entry.id}: ${[...entryIssues, ...mediaIssues].join(", ")}`,
+          );
+          continue;
+        }
+
+        // Look up remote entry by kitsuId, fall back to malId
+        let remote = entry.manga.kitsuId
+          ? remoteMangaMap.get(entry.manga.kitsuId)
+          : null;
+        if (!remote && entry.manga.malId) {
+          // Try to find by malId
+          for (const r of remoteMangaMap.values()) {
+            if (r.malId === entry.manga.malId) {
+              remote = r;
+              break;
+            }
+          }
+        }
+
+        if (remote) {
+          // Mark as seen so we don't delete it
+          mangaMatched++;
+          remoteMangaMap.delete(remote.mediaId);
+
+          // Use remote's chapter count for validation (Kitsu is authoritative for their API)
+          const remoteChapterCount = remote.chapterCount;
+          const clampedProgress = remoteChapterCount
+            ? Math.min(entry.progress, remoteChapterCount)
+            : entry.progress;
+
+          if (
+            !kitsuMangaNeedsUpdate(
+              { ...entry, progress: clampedProgress },
+              remote,
+            )
+          ) {
+            // No update needed, skip this entry
+            continue;
+          }
+
+          if (clampedProgress !== entry.progress) {
+            const localCount = entry.manga.chapterCount;
+            if (
+              localCount &&
+              remoteChapterCount &&
+              localCount !== remoteChapterCount
+            ) {
+              console.warn(
+                `[Kitsu Push] Chapter count mismatch for ${entry.manga.titleEn}: local=${localCount}, Kitsu=${remoteChapterCount}. Clamping progress from ${entry.progress} to ${clampedProgress}`,
+              );
+            } else {
+              console.warn(
+                `[Kitsu Push] Clamping manga progress: ${entry.manga.titleEn} (${entry.id}) from ${entry.progress} to ${clampedProgress} (chapters: ${remoteChapterCount})`,
+              );
+            }
+          }
+
+          mangaUpdateOps.push({
+            alias: `u${mangaUpdateOps.length}`,
+            entryId: remote.entryId,
+            input: {
+              notes: entry.notes ?? "",
+              private: entry.private,
+              progress: clampedProgress,
+              rating: toKitsuRating(entry.rating),
+              reconsumeCount: entry.rereadCount,
+              reconsuming: entry.rereading,
+              status: reverseReadStatus(entry.readStatus),
             },
           });
-          const msg = `manga "${title}" (Kitsu entry ${entryId})`;
-          console.log(`[Kitsu Push] Deleted ${msg}`);
-          deletions.push(msg);
-          mangaChanged++;
+        } else if (entry.manga.kitsuId) {
+          let chapterCount = entry.manga.chapterCount;
+          let fetchedFromKitsu = false;
+
+          // If progress > 0 but no chapter count, fetch from Kitsu
+          if (entry.progress > 0 && !chapterCount) {
+            const mediaDetails = await fetchKitsuMediaDetails(
+              entry.manga.kitsuId,
+              "MANGA",
+            );
+            if (mediaDetails?.chapterCount != null) {
+              chapterCount = mediaDetails.chapterCount;
+              fetchedFromKitsu = true;
+              // Update local database with the fetched chapter count
+              await prisma.manga.update({
+                where: { id: entry.manga.id },
+                data: { chapterCount },
+              });
+              console.log(
+                `[Kitsu Push] Fetched chapterCount=${chapterCount} for ${entry.manga.titleEn} (${entry.id})`,
+              );
+            }
+          }
+
+          const clampedProgress = chapterCount
+            ? Math.min(entry.progress, chapterCount)
+            : entry.progress;
+          if (clampedProgress !== entry.progress) {
+            if (
+              entry.manga.chapterCount &&
+              chapterCount &&
+              entry.manga.chapterCount !== chapterCount
+            ) {
+              console.warn(
+                `[Kitsu Push] Chapter count mismatch for ${entry.manga.titleEn}: local=${entry.manga.chapterCount}, Kitsu=${chapterCount}. Clamping progress from ${entry.progress} to ${clampedProgress}`,
+              );
+            } else if (fetchedFromKitsu) {
+              console.log(
+                `[Kitsu Push] Clamping manga progress on create: ${entry.manga.titleEn} (${entry.id}) from ${entry.progress} to ${clampedProgress} (Kitsu chapterCount: ${chapterCount})`,
+              );
+            } else {
+              console.warn(
+                `[Kitsu Push] Clamping manga progress on create: ${entry.manga.titleEn} (${entry.id}) from ${entry.progress} to ${clampedProgress} (chapters: ${chapterCount})`,
+              );
+            }
+          }
+
+          mangaCreateOps.push({
+            alias: `c${mangaCreateOps.length}`,
+            mediaId: entry.manga.kitsuId,
+            input: {
+              mediaType: "MANGA",
+              notes: entry.notes ?? "",
+              private: entry.private,
+              progress: clampedProgress,
+              rating: toKitsuRating(entry.rating),
+              reconsumeCount: entry.rereadCount,
+              reconsuming: entry.rereading,
+              status: reverseReadStatus(entry.readStatus),
+            },
+          });
+        }
+      }
+
+      for (const { entryId, title } of remoteMangaMap.values()) {
+        mangaDeleteOps.push({
+          alias: `d${mangaDeleteOps.length}`,
+          entryId,
+          title,
+        });
+      }
+
+      // Execute manga batches
+      console.log(
+        `[Kitsu Push] Manga: ${mangaUpdateOps.length} updates, ${mangaCreateOps.length} creates, ${mangaDeleteOps.length} deletes`,
+      );
+      for (let i = 0; i < mangaUpdateOps.length; i += KITSU_BATCH_SIZE) {
+        const batchNum = i / KITSU_BATCH_SIZE + 1;
+        const chunk = mangaUpdateOps.slice(i, i + KITSU_BATCH_SIZE);
+        console.log(
+          `[Kitsu Push] Manga update batch ${batchNum} (${chunk.length} ops)...`,
+        );
+        const query = buildKitsuUpdateBatch(chunk);
+        try {
+          await batchKitsuMutation(query);
+          console.log(`[Kitsu Push] Manga update batch ${batchNum} completed`);
+          for (const _op of chunk) {
+            mangaChanged++;
+          }
         } catch (e) {
           errors.push(
-            `delete manga entry ${entryId}: ${extractErrorMessage(e)}`,
+            `manga update batch ${batchNum}: ${extractErrorMessage(e)}`,
+          );
+        }
+      }
+
+      for (let i = 0; i < mangaCreateOps.length; i += KITSU_BATCH_SIZE) {
+        const batchNum = i / KITSU_BATCH_SIZE + 1;
+        const chunk = mangaCreateOps.slice(i, i + KITSU_BATCH_SIZE);
+        console.log(
+          `[Kitsu Push] Manga create batch ${batchNum} (${chunk.length} ops)...`,
+        );
+        const query = buildKitsuCreateBatch(chunk);
+        try {
+          await batchKitsuMutation(query);
+          console.log(`[Kitsu Push] Manga create batch ${batchNum} completed`);
+          for (const _op of chunk) {
+            mangaMatched++;
+            mangaChanged++;
+          }
+        } catch (e) {
+          errors.push(
+            `manga create batch ${batchNum}: ${extractErrorMessage(e)}`,
+          );
+        }
+      }
+
+      for (let i = 0; i < mangaDeleteOps.length; i += KITSU_BATCH_SIZE) {
+        const batchNum = i / KITSU_BATCH_SIZE + 1;
+        const chunk = mangaDeleteOps.slice(i, i + KITSU_BATCH_SIZE);
+        console.log(
+          `[Kitsu Push] Manga delete batch ${batchNum} (${chunk.length} ops)...`,
+        );
+        const query = buildKitsuDeleteBatch(chunk);
+        try {
+          await batchKitsuMutation(query);
+          console.log(`[Kitsu Push] Manga delete batch ${batchNum} completed`);
+          for (const op of chunk) {
+            const msg = `manga "${op.title}" (Kitsu entry ${op.entryId})`;
+            console.log(`[Kitsu Push] Deleted ${msg}`);
+            deletions.push(msg);
+            mangaChanged++;
+          }
+        } catch (e) {
+          errors.push(
+            `manga delete batch ${batchNum}: ${extractErrorMessage(e)}`,
           );
         }
       }
@@ -914,18 +1610,24 @@ export async function pushKitsu(logId: string): Promise<void> {
     errors.push(`Unexpected error: ${err}`);
   }
 
-  const total = animeSynced + mangaSynced;
+  const total = animeMatched + mangaMatched;
   const changed = animeChanged + mangaChanged;
   console.log(
-    `[Kitsu Push] Synced ${total} entries (${changed} changed, ${deletions.length} deleted): ${animeSynced} anime, ${mangaSynced} manga`,
+    `[Kitsu Push] Anime: ${animeMatched} matched (${animeChanged} changed)`,
+  );
+  console.log(
+    `[Kitsu Push] Manga: ${mangaMatched} matched (${mangaChanged} changed)`,
+  );
+  console.log(
+    `[Kitsu Push] Matched ${total} entries (${changed} changed, ${deletions.length} deleted): ${animeMatched} anime, ${mangaMatched} manga`,
   );
 
   await prisma.syncLog.update({
     where: { id: logId },
     data: {
       status: errors.length ? "FAILED" : "COMPLETED",
-      animeSynced,
-      mangaSynced,
+      animeSynced: animeMatched,
+      mangaSynced: mangaMatched,
       animeChanged,
       mangaChanged,
       errors,

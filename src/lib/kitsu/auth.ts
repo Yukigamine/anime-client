@@ -1,6 +1,5 @@
 import "server-only";
 import { getToken, saveToken } from "@/lib/auth";
-import { logKitsuError } from "@/lib/kitsu/debug";
 import { kitsuFetch } from "@/lib/kitsu/stealth";
 import { Zeus } from "@/lib/zeus/kitsu";
 
@@ -9,11 +8,31 @@ const KITSU_GRAPHQL =
 const KITSU_OAUTH =
   process.env.KITSU_OAUTH_URL ?? "https://kitsu.app/api/oauth/token";
 
-export interface KitsuTokenResponse {
+interface KitsuTokenResponse {
   access_token: string;
   refresh_token: string;
   expires_in: number;
   token_type: string;
+}
+
+function logKitsuError(
+  url: string,
+  status: number,
+  responseText: string,
+): void {
+  const preview = responseText.substring(0, 500);
+  const isHtml =
+    responseText.includes("<!DOCTYPE") || responseText.includes("<html");
+  const isCloudflareChallenge =
+    responseText.includes("Cloudflare") ||
+    responseText.includes("cf_clearance");
+
+  console.error(`[Kitsu Error] ${status} from ${url}`, {
+    isHtmlResponse: isHtml,
+    isCloudflareChallenge,
+    responsePreview: preview,
+    responseLength: responseText.length,
+  });
 }
 
 function checkCloudflareChallenge(
@@ -130,7 +149,7 @@ export async function loginKitsu(
   return data.access_token;
 }
 
-export async function refreshKitsuToken(refreshToken: string): Promise<string> {
+async function refreshKitsuToken(refreshToken: string): Promise<string> {
   console.log(`[Kitsu] refreshKitsuToken → ${KITSU_OAUTH}`);
 
   const res = await kitsuFetch(KITSU_OAUTH, {

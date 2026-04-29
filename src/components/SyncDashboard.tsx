@@ -1,16 +1,24 @@
 "use client";
 
+import CheckIcon from "@mui/icons-material/Check";
 import CloudDownloadIcon from "@mui/icons-material/CloudDownload";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlineOutlined";
+import WarningIcon from "@mui/icons-material/Warning";
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   Collapse,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
+  FormControlLabel,
   Paper,
   Stack,
   Tooltip,
@@ -20,7 +28,11 @@ import { enqueueSnackbar } from "notistack";
 import { useCallback, useEffect, useState } from "react";
 import type { SyncLog } from "@/generated/prisma/client";
 import {
+  deleteInvalidEntriesAction,
+  findInvalidEntriesAction,
   getSyncStatusAction,
+  type InvalidEntriesResult,
+  normalizeInvalidRatingsAction,
   type SyncStatusPayload,
   triggerSyncAction,
 } from "@/lib/actions";
@@ -32,6 +44,19 @@ export default function SyncDashboard() {
   const [running, setRunning] = useState<string | null>(null); // "KITSU-PULL" etc.
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
   const [expandedRecent, setExpandedRecent] = useState<string | null>(null);
+  const [validating, setValidating] = useState(false);
+  const [invalidModalOpen, setInvalidModalOpen] = useState(false);
+  const [invalidData, setInvalidData] = useState<InvalidEntriesResult | null>(
+    null,
+  );
+  const [loadingInvalid, setLoadingInvalid] = useState(false);
+  const [hasInvalidEntries, setHasInvalidEntries] = useState(false);
+  const [selectedAnimeIds, setSelectedAnimeIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [selectedMangaIds, setSelectedMangaIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -41,10 +66,22 @@ export default function SyncDashboard() {
     }
   }, []);
 
+  const checkForInvalidEntries = useCallback(async () => {
+    try {
+      const result = await findInvalidEntriesAction();
+      setHasInvalidEntries(
+        result.invalidAnime.length > 0 || result.invalidManga.length > 0,
+      );
+    } catch {
+      // ignore transient errors
+    }
+  }, []);
+
   // Initial load + poll while something is running
   useEffect(() => {
     fetchStatus();
-  }, [fetchStatus]);
+    checkForInvalidEntries();
+  }, [fetchStatus, checkForInvalidEntries]);
 
   useEffect(() => {
     if (!running) return;
@@ -71,8 +108,102 @@ export default function SyncDashboard() {
       (l) => l.provider === provider && l.direction === direction,
     );
 
+  async function handleValidate() {
+    setValidating(true);
+    try {
+      const result = await normalizeInvalidRatingsAction();
+      if (result.ok) {
+        const totalFixed = result.data.animeFixed + result.data.mangaFixed;
+        if (totalFixed > 0) {
+          enqueueSnackbar(
+            `Normalized ${totalFixed} invalid rating${totalFixed > 1 ? "s" : ""} (clamped to 2-20 range)`,
+            { variant: "info" },
+          );
+        }
+      } else {
+        enqueueSnackbar(result.error, { variant: "error" });
+      }
+
+      // Then check for any remaining invalid entries
+      const invalidResult = await findInvalidEntriesAction();
+      const hasInvalid =
+        invalidResult.invalidAnime.length > 0 ||
+        invalidResult.invalidManga.length > 0;
+
+      const invalidAnimeProgress = invalidResult.invalidAnime.filter((entry) =>
+        entry.issues.includes("progress exceeds episode count"),
+      ).length;
+      const invalidMangaProgress = invalidResult.invalidManga.filter((entry) =>
+        entry.issues.includes("progress exceeds chapter count"),
+      ).length;
+
+      if (invalidAnimeProgress > 0 || invalidMangaProgress > 0) {
+        enqueueSnackbar(
+          `Found ${invalidAnimeProgress} anime and ${invalidMangaProgress} manga entries with progress beyond episode/chapter limits`,
+          { variant: "warning" },
+        );
+      }
+
+      setHasInvalidEntries(hasInvalid);
+
+      if (hasInvalid) {
+        setInvalidData(invalidResult);
+        setSelectedAnimeIds(new Set());
+        setSelectedMangaIds(new Set());
+        setInvalidModalOpen(true);
+      } else {
+        enqueueSnackbar("No invalid entries found", { variant: "success" });
+      }
+    } finally {
+      setValidating(false);
+    }
+  }
+
+  async function handleDeleteInvalid() {
+    if (!invalidData) return;
+    const animeIds = Array.from(selectedAnimeIds);
+    const mangaIds = Array.from(selectedMangaIds);
+    const total = animeIds.length + mangaIds.length;
+    if (total === 0) {
+      enqueueSnackbar("Select entries to delete", { variant: "warning" });
+      return;
+    }
+    setLoadingInvalid(true);
+    try {
+      const result = await deleteInvalidEntriesAction(animeIds, mangaIds);
+      if (result.ok) {
+        enqueueSnackbar(`Deleted ${total} invalid entries`, {
+          variant: "success",
+        });
+        setInvalidModalOpen(false);
+        await fetchStatus();
+      } else {
+        enqueueSnackbar(result.error, { variant: "error" });
+      }
+    } finally {
+      setLoadingInvalid(false);
+    }
+  }
+
   return (
     <Box>
+      <Box sx={{ display: "flex", gap: 2, alignItems: "flex-start", mb: 4 }}>
+        <Typography color="text.secondary" sx={{ flex: 1 }}>
+          Pull imports the latest data from Kitsu or AniList into your local
+          database. Push writes your local changes back to the provider.
+        </Typography>
+        <Button
+          variant="outlined"
+          color={hasInvalidEntries ? "warning" : "success"}
+          size="small"
+          startIcon={hasInvalidEntries ? <WarningIcon /> : <CheckIcon />}
+          onClick={handleValidate}
+          disabled={validating}
+          sx={{ textTransform: "none", whiteSpace: "nowrap" }}
+        >
+          {validating ? "Validating…" : "Validate"}
+        </Button>
+      </Box>
       <Stack spacing={3}>
         {(["KITSU", "ANILIST"] as const).map((provider) => (
           <Paper key={provider} sx={{ p: 3 }}>
@@ -100,7 +231,11 @@ export default function SyncDashboard() {
               )}
             </Box>
 
-            <Stack direction="row" spacing={2} sx={{ flexWrap: "wrap" }}>
+            <Stack
+              direction="row"
+              spacing={2}
+              sx={{ flexWrap: "wrap", alignItems: "flex-start" }}
+            >
               {(["PULL", "PUSH"] as const).map((dir) => {
                 const log = lastLog(provider, dir);
                 const busy = isRunning(provider, dir);
@@ -181,6 +316,145 @@ export default function SyncDashboard() {
           </Stack>
         </Box>
       )}
+
+      {/* Invalid entries modal */}
+      <Dialog
+        open={invalidModalOpen}
+        onClose={() => setInvalidModalOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Invalid entries</DialogTitle>
+        <DialogContent>
+          {invalidData &&
+          (invalidData.invalidAnime.length > 0 ||
+            invalidData.invalidManga.length > 0) ? (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              {invalidData.invalidAnime.length > 0 && (
+                <Box>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ fontWeight: 600, mb: 1 }}
+                  >
+                    Anime ({invalidData.invalidAnime.length})
+                  </Typography>
+                  <Stack spacing={1}>
+                    {invalidData.invalidAnime.map((entry) => (
+                      <FormControlLabel
+                        key={entry.id}
+                        control={
+                          <Checkbox
+                            checked={selectedAnimeIds.has(entry.id)}
+                            onChange={(e) => {
+                              const newSet = new Set(selectedAnimeIds);
+                              if (e.target.checked) {
+                                newSet.add(entry.id);
+                              } else {
+                                newSet.delete(entry.id);
+                              }
+                              setSelectedAnimeIds(newSet);
+                            }}
+                          />
+                        }
+                        label={
+                          <Box>
+                            <Typography variant="body2">
+                              {entry.title || "(untitled)"}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              ID: {entry.id}
+                              {entry.progressLimit
+                                ? `, Progress: ${entry.progress ?? 0}, Episodes: ${entry.progressLimit}`
+                                : ""}
+                            </Typography>
+                            <Typography variant="caption" color="error">
+                              {entry.issues.join(", ")}
+                            </Typography>
+                          </Box>
+                        }
+                      />
+                    ))}
+                  </Stack>
+                </Box>
+              )}
+              {invalidData.invalidManga.length > 0 && (
+                <Box>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{ fontWeight: 600, mb: 1 }}
+                  >
+                    Manga ({invalidData.invalidManga.length})
+                  </Typography>
+                  <Stack spacing={1}>
+                    {invalidData.invalidManga.map((entry) => (
+                      <FormControlLabel
+                        key={entry.id}
+                        control={
+                          <Checkbox
+                            checked={selectedMangaIds.has(entry.id)}
+                            onChange={(e) => {
+                              const newSet = new Set(selectedMangaIds);
+                              if (e.target.checked) {
+                                newSet.add(entry.id);
+                              } else {
+                                newSet.delete(entry.id);
+                              }
+                              setSelectedMangaIds(newSet);
+                            }}
+                          />
+                        }
+                        label={
+                          <Box>
+                            <Typography variant="body2">
+                              {entry.title || "(untitled)"}
+                            </Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              ID: {entry.id}
+                              {entry.progressLimit
+                                ? `, Progress: ${entry.progress ?? 0}, Chapters: ${entry.progressLimit}`
+                                : ""}
+                            </Typography>
+                            <Typography variant="caption" color="error">
+                              {entry.issues.join(", ")}
+                            </Typography>
+                          </Box>
+                        }
+                      />
+                    ))}
+                  </Stack>
+                </Box>
+              )}
+            </Stack>
+          ) : (
+            <Typography color="success.main" sx={{ mt: 1 }}>
+              No invalid entries found
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setInvalidModalOpen(false)}>Cancel</Button>
+          <Button
+            onClick={handleDeleteInvalid}
+            variant="contained"
+            color="error"
+            disabled={
+              loadingInvalid ||
+              !invalidData ||
+              (invalidData.invalidAnime.length === 0 &&
+                invalidData.invalidManga.length === 0) ||
+              (selectedAnimeIds.size === 0 && selectedMangaIds.size === 0)
+            }
+          >
+            {loadingInvalid ? "Deleting..." : "Delete selected"}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

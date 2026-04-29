@@ -2,7 +2,7 @@ import "server-only";
 import { kv } from "@vercel/kv";
 
 export const LIST_CACHE_KEY = "anime:list";
-export const LIST_CACHE_TTL = 60 * 5; // 5 minutes
+const LIST_CACHE_TTL = 60 * 5; // 5 minutes
 
 export async function getCachedList<T>(key: string): Promise<T | null> {
   try {

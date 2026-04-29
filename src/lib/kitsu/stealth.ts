@@ -4,7 +4,7 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
 puppeteer.use(StealthPlugin());
 
-export interface StealthResponse {
+interface StealthResponse {
   status: number;
   headers: Record<string, string>;
   body: string;

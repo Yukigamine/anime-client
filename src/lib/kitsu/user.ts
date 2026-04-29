@@ -2,15 +2,6 @@ import "server-only";
 import { kitsuThunder } from "./thunder";
 import type { KitsuFavoriteItem, KitsuUserProfile } from "./user-types";
 
-export {
-  ageFromBirthday,
-  daysAgo,
-  formatProfileDate,
-  formatWatchTime,
-  type KitsuFavoriteItem,
-  type KitsuUserProfile,
-} from "./user-types";
-
 function extractImageUrl(item: any, isMedia: boolean): string | null {
   return isMedia
     ? (item.posterImage?.original?.url ?? null)
