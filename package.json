@@ -55,7 +55,7 @@
     "dotenv": "17.4.2",
     "graphql-zeus": "7.2.1",
     "husky": "9.1.7",
-    "knip": "6.8.0",
+    "knip": "6.9.0",
     "lint-staged": "16.4.0",
     "server-only": "0.0.1",
     "tsx": "4.21.0",
