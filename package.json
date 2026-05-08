@@ -49,7 +49,7 @@
     "@commitlint/config-conventional": "20.5.3",
     "@commitlint/types": "20.5.0",
     "@prisma/adapter-pg": "7.8.0",
-    "@types/node": "25.6.1",
+    "@types/node": "25.6.2",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
     "dotenv": "17.4.2",
