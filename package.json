@@ -50,7 +50,7 @@
     "@commitlint/types": "21.0.1",
     "@prisma/adapter-pg": "7.8.0",
     "@types/node": "25.9.1",
-    "@types/react": "19.2.14",
+    "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
     "dotenv": "17.4.2",
     "graphql-zeus": "7.2.1",
