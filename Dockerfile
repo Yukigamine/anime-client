@@ -12,11 +12,12 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmrc.yaml ./
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copy source
+# Copy source and prisma schema early
+COPY prisma ./prisma
 COPY . .
 
 # Generate Prisma client and build
-RUN pnpm run prepare && pnpm build
+RUN pnpm run deploy
 
 # Runtime stage
 FROM node:22-alpine
