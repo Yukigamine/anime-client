@@ -8,12 +8,12 @@ RUN npm install -g pnpm
 
 # Copy package files
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .pnpmrc.yaml ./
+COPY prisma ./prisma
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
 
-# Copy source and prisma schema early
-COPY prisma ./prisma
+# Copy source
 COPY . .
 
 # Generate Prisma client and build
