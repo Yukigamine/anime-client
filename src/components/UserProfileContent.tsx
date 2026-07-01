@@ -124,7 +124,7 @@ export default function UserProfileContent({ username }: { username: string }) {
             alignItems: "flex-start",
           }}
         >
-          <Box sx={{ flexShrink: 0, width: { xs: "100%", md: 280 } }}>
+          <Box sx={{ flexShrink: 0, width: { xs: "100%", md: 340 } }}>
             <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
               <Box
                 sx={{
@@ -190,20 +190,6 @@ export default function UserProfileContent({ username }: { username: string }) {
                   )}
                   {profile.location && (
                     <DetailRow label="Location">{profile.location}</DetailRow>
-                  )}
-                  {profile.website && (
-                    <DetailRow label="Website">
-                      <Link
-                        href={profile.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        underline="hover"
-                        variant="body2"
-                        sx={{ wordBreak: "break-all" }}
-                      >
-                        {profile.website}
-                      </Link>
-                    </DetailRow>
                   )}
                   {profile.waifu && (
                     <DetailRow label={profile.waifu.label}>

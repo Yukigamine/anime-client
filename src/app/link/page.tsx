@@ -13,6 +13,7 @@ import {
 import type { Metadata } from "next";
 import { logoutAndRedirectAction } from "@/lib/actions";
 import { getAuthStatus } from "@/lib/auth";
+import { getSession } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Login – Anime Client" };
 export const dynamic = "force-dynamic";
@@ -22,7 +23,11 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const [auth, params] = await Promise.all([getAuthStatus(), searchParams]);
+  const [auth, params, _session] = await Promise.all([
+    getAuthStatus(),
+    searchParams,
+    getSession(),
+  ]);
   const error = params.error;
 
   return (

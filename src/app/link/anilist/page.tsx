@@ -2,10 +2,14 @@ import { Container, Typography } from "@mui/material";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { buildAniListAuthUrl } from "@/lib/anilist/auth";
+import { getSession } from "@/lib/session";
 
 export const metadata: Metadata = { title: "AniList Login – Anime Client" };
 
-export default function AniListLoginPage() {
+export default async function AniListLoginPage() {
+  const session = await getSession();
+  if (!session) redirect("/login");
+
   const authUrl = buildAniListAuthUrl();
 
   if (!process.env.ANILIST_CLIENT_ID) {

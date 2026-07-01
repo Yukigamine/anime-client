@@ -34,7 +34,7 @@ function FavoriteCard({ item }: { item: KitsuFavoriteItem }) {
         gap: 0.75,
         textDecoration: "none",
         color: "inherit",
-        width: 110,
+        width: { xs: "100%", sm: 110 },
         flexShrink: 0,
         "&:hover .fav-img": { boxShadow: 4, transform: "translateY(-2px)" },
       }}
@@ -43,8 +43,9 @@ function FavoriteCard({ item }: { item: KitsuFavoriteItem }) {
         className="fav-img"
         sx={{
           position: "relative",
-          width: 110,
-          height: 155,
+          width: { xs: "100%", sm: 110 },
+          height: { xs: "auto", sm: 155 },
+          aspectRatio: "110 / 155",
           borderRadius: 1,
           overflow: "hidden",
           bgcolor: "action.hover",
@@ -140,9 +141,14 @@ export default function UserFavorites({
 
       <Box
         sx={{
-          display: "flex",
-          flexWrap: "wrap",
+          display: "grid",
+          gridTemplateColumns: {
+            xs: "repeat(2, 1fr)",
+            sm: "repeat(3, 1fr)",
+            md: "repeat(auto-fill, 110px)",
+          },
           gap: 2,
+          justifyContent: { xs: "space-between", md: "flex-start" },
         }}
       >
         {sorted.map((item) => (

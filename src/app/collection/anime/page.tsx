@@ -1,47 +1,51 @@
 import AddIcon from "@mui/icons-material/Add";
-import {
-  Box,
-  Button,
-  Chip,
-  Container,
-  Paper,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Typography,
-} from "@mui/material";
+import { Box, Button, Container, Stack, Typography } from "@mui/material";
 import type { Metadata } from "next";
+import { AnimeCollectionGrid } from "@/components/AnimeCollectionGrid";
+import { CollectionViewWrapper } from "@/components/CollectionViewWrapper";
+import AppLink from "@/components/Link";
 import prisma from "@/lib/prisma";
+import { getSession } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Anime Collection – Anime Client" };
 export const dynamic = "force-dynamic";
 
-const FORMAT_LABELS = {
+const _FORMAT_LABELS: Record<string, string> = {
   DVD: "DVD",
   BLU_RAY: "Blu-ray",
   VHS: "VHS",
   DIGITAL: "Digital",
   LIMITED_EDITION: "Limited Edition",
   OTHER: "Other",
-} as const;
+};
 
-const CONDITION_COLORS = {
+const _RARITY_LABELS: Record<string, string> = {
+  STANDARD: "Standard",
+  COLLECTORS: "Collector's",
+  DELUXE: "Deluxe",
+  STEELBOOK: "Steelbook",
+};
+
+const _CONDITION_COLORS: Record<
+  string,
+  "success" | "primary" | "warning" | "error"
+> = {
   MINT: "success",
   NEAR_MINT: "success",
   GOOD: "primary",
   FAIR: "warning",
   POOR: "error",
-} as const;
+};
 
 export default async function AnimeCollectionPage() {
-  const items = await prisma.animeCollectionItem.findMany({
-    include: { anime: true },
-    orderBy: [{ anime: { titleEn: "asc" } }, { createdAt: "asc" }],
-  });
+  const [items, session] = await Promise.all([
+    prisma.animeCollectionItem.findMany({
+      include: { anime: true },
+      orderBy: [{ anime: { titleEn: "asc" } }, { createdAt: "asc" }],
+    }),
+    getSession(),
+  ]);
+  const isAuthenticated = !!session;
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -61,14 +65,17 @@ export default async function AnimeCollectionPage() {
             {items.length} item{items.length !== 1 ? "s" : ""}
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          disabled
-          sx={{ textTransform: "none" }}
-        >
-          Add item (coming soon)
-        </Button>
+        {isAuthenticated && (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            component={AppLink}
+            href="/collection/anime/add"
+            sx={{ textTransform: "none" }}
+          >
+            Add item
+          </Button>
+        )}
       </Box>
 
       {items.length === 0 ? (
@@ -79,75 +86,17 @@ export default async function AnimeCollectionPage() {
           <Typography
             sx={{ color: "text.disabled", textAlign: "center", maxWidth: 400 }}
           >
-            Track your physical and digital anime collection here. Adding and
-            editing items will be available in a future update.
+            Track your physical and digital anime collection here. Use the Add
+            item button to get started.
           </Typography>
         </Stack>
       ) : (
-        <TableContainer component={Paper}>
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Title</TableCell>
-                <TableCell>Format</TableCell>
-                <TableCell>Condition</TableCell>
-                <TableCell>Purchased</TableCell>
-                <TableCell align="right">Price</TableCell>
-                <TableCell>Notes</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {items.map((item) => {
-                const title =
-                  item.anime.titleEn ??
-                  item.anime.titleRomaji ??
-                  item.anime.titleJp ??
-                  "Unknown";
-                return (
-                  <TableRow key={item.id} hover>
-                    <TableCell sx={{ fontWeight: 500 }}>{title}</TableCell>
-                    <TableCell>
-                      {FORMAT_LABELS[item.format] ?? item.format}
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={item.condition}
-                        color={
-                          CONDITION_COLORS[item.condition] as
-                            | "success"
-                            | "primary"
-                            | "warning"
-                            | "error"
-                        }
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      {item.purchasedAt
-                        ? new Date(item.purchasedAt).toLocaleDateString()
-                        : "—"}
-                    </TableCell>
-                    <TableCell align="right">
-                      {item.pricePaid != null
-                        ? `$${item.pricePaid.toFixed(2)}`
-                        : "—"}
-                    </TableCell>
-                    <TableCell
-                      sx={{
-                        maxWidth: 200,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {item.notes ?? "—"}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </TableContainer>
+        <CollectionViewWrapper
+          items={items}
+          type="anime"
+          gridComponent={AnimeCollectionGrid}
+          isAuthenticated={isAuthenticated}
+        />
       )}
     </Container>
   );

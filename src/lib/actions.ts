@@ -1,13 +1,16 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { SyncLog } from "@/generated/prisma/client";
 import { pullAniList, pushAniList } from "@/lib/anilist/sync";
 import { deleteToken, getAuthStatus, getToken } from "@/lib/auth";
+import { auth } from "@/lib/betterauth";
 import { invalidateListCache } from "@/lib/cache";
 import { ensureValidKitsuToken, loginKitsu } from "@/lib/kitsu/auth";
 import { pullKitsu, pushKitsu } from "@/lib/kitsu/sync";
 import prisma from "@/lib/prisma";
+import { getSession, requireSession } from "@/lib/session";
 import {
   validateAnimeListEntry,
   validateMangaListEntry,
@@ -89,14 +92,33 @@ async function logoutProviderAction(
 
 // Form-action variant — binds provider and redirects back to /link
 export async function logoutAndRedirectAction(provider: "KITSU" | "ANILIST") {
+  await requireSession();
   await logoutProviderAction(provider);
   redirect("/link");
+}
+
+// Logout from the app and redirect to login
+export async function logoutAppAction(): Promise<ActionResult> {
+  try {
+    const session = await getSession();
+    if (session) {
+      await auth.api.signOut({ headers: await headers() });
+    }
+    return { ok: true, data: undefined };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 export async function triggerSyncAction(
   provider: "KITSU" | "ANILIST",
   direction: "PULL" | "PUSH",
 ): Promise<ActionResult<{ logId: string }>> {
+  await requireSession();
+
   if (provider === "KITSU") {
     const token = await ensureValidKitsuToken();
     if (!token) return { ok: false, error: "Not logged in to Kitsu" };
@@ -132,6 +154,7 @@ export async function triggerSyncAction(
 }
 
 export async function getSyncStatusAction(): Promise<SyncStatusPayload> {
+  await requireSession();
   const [logs, auth] = await Promise.all([
     prisma.syncLog.findMany({ orderBy: { startedAt: "desc" }, take: 20 }),
     getAuthStatus(),
@@ -153,6 +176,7 @@ export type InvalidEntriesResult = {
 };
 
 export async function findInvalidEntriesAction(): Promise<InvalidEntriesResult> {
+  await requireSession();
   const [animeEntries, mangaEntries] = await Promise.all([
     prisma.animeListEntry.findMany({ include: { anime: true } }),
     prisma.mangaListEntry.findMany({ include: { manga: true } }),
@@ -203,6 +227,7 @@ export async function deleteInvalidEntriesAction(
   animeIds: string[],
   mangaIds: string[],
 ): Promise<ActionResult> {
+  await requireSession();
   try {
     await Promise.all([
       animeIds.length > 0
@@ -225,6 +250,7 @@ export async function deleteInvalidEntriesAction(
 export async function normalizeInvalidRatingsAction(): Promise<
   ActionResult<{ animeFixed: number; mangaFixed: number }>
 > {
+  await requireSession();
   try {
     let animeFixed = 0;
     let mangaFixed = 0;

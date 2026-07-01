@@ -17,10 +17,16 @@ CREATE TYPE "SyncStatus" AS ENUM ('RUNNING', 'COMPLETED', 'FAILED', 'CANCELLED')
 CREATE TYPE "SyncDirection" AS ENUM ('PULL', 'PUSH');
 
 -- CreateEnum
-CREATE TYPE "MediaFormat" AS ENUM ('DVD', 'BLU_RAY', 'VHS', 'DIGITAL', 'LIMITED_EDITION', 'OTHER');
+CREATE TYPE "MediaFormat" AS ENUM ('DVD', 'BLU_RAY', 'VHS', 'DIGITAL', 'OTHER');
 
 -- CreateEnum
 CREATE TYPE "CollectionCondition" AS ENUM ('MINT', 'NEAR_MINT', 'GOOD', 'FAIR', 'POOR');
+
+-- CreateEnum
+CREATE TYPE "CollectionRarity" AS ENUM ('STEELBOOK', 'DELUXE', 'LIMITED', 'COLLECTORS', 'STANDARD');
+
+-- CreateEnum
+CREATE TYPE "MangaLanguage" AS ENUM ('ENGLISH', 'JAPANESE', 'OTHER');
 
 -- CreateTable
 CREATE TABLE "AuthToken" (
@@ -35,6 +41,64 @@ CREATE TABLE "AuthToken" (
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "AuthToken_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "user" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "emailVerified" BOOLEAN NOT NULL,
+    "image" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "user_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "session" (
+    "id" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "token" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+    "ipAddress" TEXT,
+    "userAgent" TEXT,
+    "userId" TEXT NOT NULL,
+
+    CONSTRAINT "session_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "account" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "providerId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "accessToken" TEXT,
+    "refreshToken" TEXT,
+    "idToken" TEXT,
+    "accessTokenExpiresAt" TIMESTAMP(3),
+    "refreshTokenExpiresAt" TIMESTAMP(3),
+    "scope" TEXT,
+    "password" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "account_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "verification" (
+    "id" TEXT NOT NULL,
+    "identifier" TEXT NOT NULL,
+    "value" TEXT NOT NULL,
+    "expiresAt" TIMESTAMP(3) NOT NULL,
+    "createdAt" TIMESTAMP(3),
+    "updatedAt" TIMESTAMP(3),
+
+    CONSTRAINT "verification_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -103,6 +167,7 @@ CREATE TABLE "AnimeListEntry" (
 CREATE TABLE "AnimeCollectionItem" (
     "id" TEXT NOT NULL,
     "animeId" TEXT NOT NULL,
+    "rarity" "CollectionRarity" NOT NULL DEFAULT 'STANDARD',
     "format" "MediaFormat" NOT NULL DEFAULT 'BLU_RAY',
     "condition" "CollectionCondition" NOT NULL DEFAULT 'GOOD',
     "notes" TEXT,
@@ -164,14 +229,13 @@ CREATE TABLE "MangaListEntry" (
 CREATE TABLE "MangaCollectionItem" (
     "id" TEXT NOT NULL,
     "mangaId" TEXT NOT NULL,
-    "volumeNumber" INTEGER,
-    "format" "MediaFormat" NOT NULL DEFAULT 'OTHER',
     "condition" "CollectionCondition" NOT NULL DEFAULT 'GOOD',
+    "language" "MangaLanguage" NOT NULL DEFAULT 'ENGLISH',
     "notes" TEXT,
-    "purchasedAt" TIMESTAMP(3),
-    "pricePaid" DOUBLE PRECISION,
-    "barcode" TEXT,
-    "isBox" BOOLEAN NOT NULL DEFAULT false,
+    "containsSerialized" BOOLEAN NOT NULL DEFAULT false,
+    "containsOmnibus" BOOLEAN NOT NULL DEFAULT false,
+    "volumes" INTEGER[],
+    "chapters" INTEGER[],
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -180,6 +244,18 @@ CREATE TABLE "MangaCollectionItem" (
 
 -- CreateIndex
 CREATE UNIQUE INDEX "AuthToken_provider_key" ON "AuthToken"("provider");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "user_email_key" ON "user"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "session_token_key" ON "session"("token");
+
+-- CreateIndex
+CREATE INDEX "session_userId_idx" ON "session"("userId");
+
+-- CreateIndex
+CREATE INDEX "account_userId_idx" ON "account"("userId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Anime_kitsuId_key" ON "Anime"("kitsuId");
@@ -204,6 +280,12 @@ CREATE UNIQUE INDEX "Manga_malId_key" ON "Manga"("malId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "MangaListEntry_mangaId_key" ON "MangaListEntry"("mangaId");
+
+-- AddForeignKey
+ALTER TABLE "session" ADD CONSTRAINT "session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "account" ADD CONSTRAINT "account_userId_fkey" FOREIGN KEY ("userId") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "AnimeListEntry" ADD CONSTRAINT "AnimeListEntry_animeId_fkey" FOREIGN KEY ("animeId") REFERENCES "Anime"("id") ON DELETE CASCADE ON UPDATE CASCADE;

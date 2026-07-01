@@ -2,6 +2,15 @@ import { NextResponse } from "next/server";
 import { exchangeAniListCode } from "@/lib/anilist/auth";
 import { getToken } from "@/lib/auth";
 
+// Allowlist of safe error messages to surface to the user.
+const SAFE_ERRORS = new Set(["access_denied", "missing_code"]);
+
+function safeError(raw: string): string {
+  if (SAFE_ERRORS.has(raw)) return raw;
+  // Don't leak internal details; log server-side instead
+  return "authentication_failed";
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
@@ -9,7 +18,10 @@ export async function GET(request: Request) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/link?error=${encodeURIComponent(error)}`, request.url),
+      new URL(
+        `/link?error=${encodeURIComponent(safeError(error))}`,
+        request.url,
+      ),
     );
   }
 
@@ -29,18 +41,23 @@ export async function GET(request: Request) {
         stored?.username &&
         stored.username.toLowerCase() !== requiredUsername.toLowerCase()
       ) {
-        const msg = `Logged in as "${stored.username}" but this app requires "${requiredUsername}".`;
+        console.warn(
+          `[anilist/callback] Expected "${requiredUsername}" but got "${stored.username}"`,
+        );
         return NextResponse.redirect(
-          new URL(`/link?error=${encodeURIComponent(msg)}`, request.url),
+          new URL(
+            `/link?error=${encodeURIComponent("wrong_account")}`,
+            request.url,
+          ),
         );
       }
     }
 
     return NextResponse.redirect(new URL("/sync", request.url));
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[anilist/callback] token exchange error:", err);
     return NextResponse.redirect(
-      new URL(`/link?error=${encodeURIComponent(msg)}`, request.url),
+      new URL("/link?error=authentication_failed", request.url),
     );
   }
 }

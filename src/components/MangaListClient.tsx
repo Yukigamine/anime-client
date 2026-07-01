@@ -42,10 +42,15 @@ export default function MangaListClient({
   const [activeTab, setActiveTab] = useState<StatusTab>("ALL");
   const [search, setSearch] = useState("");
   const [isPending, startTransition] = useTransition();
-  const tabCacheRef = useRef<Record<StatusTab, MangaWithEntry[]>>({} as any);
+  const tabCacheRef = useRef<Record<StatusTab, MangaWithEntry[]>>(
+    {} as Record<StatusTab, MangaWithEntry[]>,
+  );
 
   useEffect(() => {
-    const cache: Record<StatusTab, MangaWithEntry[]> = {} as any;
+    const cache: Record<StatusTab, MangaWithEntry[]> = {} as Record<
+      StatusTab,
+      MangaWithEntry[]
+    >;
     TABS.forEach(({ value: tab }) => {
       if (tab === "ALL") {
         cache[tab] = items;

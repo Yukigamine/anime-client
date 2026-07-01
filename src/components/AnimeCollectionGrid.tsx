@@ -1,0 +1,68 @@
+"use client";
+
+import { Box } from "@mui/material";
+import { CollectionCard } from "@/components/CollectionCard";
+import { CollectionItemActions } from "@/components/CollectionItemActions";
+import type { Anime, AnimeCollectionItem } from "@/generated/prisma/client";
+
+type Props = {
+  items: (AnimeCollectionItem & { anime: Anime })[];
+  isAuthenticated?: boolean;
+};
+
+const RARITY_COLORS: Record<string, string> = {
+  STANDARD: "#90caf9",
+  COLLECTORS: "#81c784",
+  DELUXE: "#9c27b0",
+  STEELBOOK: "#ffb74d",
+  LIMITED: "#ef5350",
+};
+
+const FORMAT_COLORS: Record<string, string> = {
+  DVD: "#795548",
+  BLU_RAY: "#1976d2",
+  VHS: "#f57c00",
+  DIGITAL: "#00796b",
+  OTHER: "#757575",
+};
+
+export function AnimeCollectionGrid({ items, isAuthenticated = false }: Props) {
+  return (
+    <Box
+      sx={{
+        display: "grid",
+        gridTemplateColumns: {
+          xs: "repeat(2, 1fr)",
+          sm: "repeat(3, 1fr)",
+          md: "repeat(4, 1fr)",
+          lg: "repeat(5, 1fr)",
+        },
+        gap: 2,
+        py: 2,
+      }}
+    >
+      {items.map((item) => (
+        <CollectionCard
+          key={item.id}
+          image={item.anime.coverImageUrl || "/placeholder.png"}
+          imageAlt={item.anime.titleEn || ""}
+          title={item.anime.titleEn || ""}
+          actions={
+            isAuthenticated ? (
+              <CollectionItemActions
+                id={item.id}
+                type="anime"
+                title={item.anime.titleEn || ""}
+                editHref={`/collection/anime/${item.id}/edit`}
+              />
+            ) : undefined
+          }
+          chips={[
+            { label: item.rarity, color: RARITY_COLORS[item.rarity] },
+            { label: item.format, color: FORMAT_COLORS[item.format] },
+          ]}
+        />
+      ))}
+    </Box>
+  );
+}

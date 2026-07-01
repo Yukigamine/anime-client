@@ -7,7 +7,13 @@ import type {
   ReadStatus,
   WatchStatus,
 } from "@/generated/prisma/client";
-import { getCachedList, LIST_CACHE_KEY, setCachedList } from "./cache";
+import {
+  ANIME_LIST_KEY,
+  getCached,
+  LIST_TTL,
+  MANGA_LIST_KEY,
+  setCached,
+} from "./cache";
 import prisma from "./prisma";
 
 export type AnimeWithEntry = Anime & { listEntry: AnimeListEntry | null };
@@ -16,8 +22,8 @@ export type MangaWithEntry = Manga & { listEntry: MangaListEntry | null };
 export async function getAnimeList(
   status?: WatchStatus,
 ): Promise<AnimeWithEntry[]> {
-  const cacheKey = `${LIST_CACHE_KEY}:anime:${status ?? "all"}`;
-  const cached = await getCachedList<AnimeWithEntry[]>(cacheKey);
+  const cacheKey = `${ANIME_LIST_KEY}:${status ?? "all"}`;
+  const cached = await getCached<AnimeWithEntry[]>(cacheKey);
   if (cached) return cached;
 
   const entries = await prisma.anime.findMany({
@@ -28,13 +34,13 @@ export async function getAnimeList(
     orderBy: [{ titleEn: "asc" }],
   });
 
-  await setCachedList(cacheKey, entries);
+  await setCached(cacheKey, entries, LIST_TTL);
   return entries;
 }
 
 export async function getAnimeListCounts(): Promise<Record<string, number>> {
-  const cacheKey = `${LIST_CACHE_KEY}:anime:counts`;
-  const cached = await getCachedList<Record<string, number>>(cacheKey);
+  const cacheKey = `${ANIME_LIST_KEY}:counts`;
+  const cached = await getCached<Record<string, number>>(cacheKey);
   if (cached) return cached;
 
   const groups = await prisma.animeListEntry.groupBy({
@@ -46,15 +52,15 @@ export async function getAnimeListCounts(): Promise<Record<string, number>> {
   const counts: Record<string, number> = { ALL: total };
   for (const g of groups) counts[g.watchStatus] = g._count.watchStatus;
 
-  await setCachedList(cacheKey, counts);
+  await setCached(cacheKey, counts, LIST_TTL);
   return counts;
 }
 
 export async function getMangaList(
   status?: ReadStatus,
 ): Promise<MangaWithEntry[]> {
-  const cacheKey = `${LIST_CACHE_KEY}:manga:${status ?? "all"}`;
-  const cached = await getCachedList<MangaWithEntry[]>(cacheKey);
+  const cacheKey = `${MANGA_LIST_KEY}:${status ?? "all"}`;
+  const cached = await getCached<MangaWithEntry[]>(cacheKey);
   if (cached) return cached;
 
   const entries = await prisma.manga.findMany({
@@ -65,13 +71,13 @@ export async function getMangaList(
     orderBy: [{ titleEn: "asc" }],
   });
 
-  await setCachedList(cacheKey, entries);
+  await setCached(cacheKey, entries, LIST_TTL);
   return entries;
 }
 
 export async function getMangaListCounts(): Promise<Record<string, number>> {
-  const cacheKey = `${LIST_CACHE_KEY}:manga:counts`;
-  const cached = await getCachedList<Record<string, number>>(cacheKey);
+  const cacheKey = `${MANGA_LIST_KEY}:counts`;
+  const cached = await getCached<Record<string, number>>(cacheKey);
   if (cached) return cached;
 
   const groups = await prisma.mangaListEntry.groupBy({
@@ -83,6 +89,6 @@ export async function getMangaListCounts(): Promise<Record<string, number>> {
   const counts: Record<string, number> = { ALL: total };
   for (const g of groups) counts[g.readStatus] = g._count.readStatus;
 
-  await setCachedList(cacheKey, counts);
+  await setCached(cacheKey, counts, LIST_TTL);
   return counts;
 }

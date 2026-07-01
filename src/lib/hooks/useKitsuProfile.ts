@@ -75,7 +75,7 @@ async function fetchKitsuProfile(
     ],
   });
 
-  const base = (result as any)?.findProfileBySlug;
+  const base = result.findProfileBySlug;
   if (!base) return null;
 
   const favorites: KitsuUserProfile["favorites"] = {
@@ -86,22 +86,35 @@ async function fetchKitsuProfile(
   };
 
   for (const node of base.favorites?.nodes ?? []) {
-    const item = node?.item;
-    if (!item) continue;
-    const rawType = (item.__typename as string).toLowerCase();
-    if (!["anime", "manga", "character", "person"].includes(rawType)) continue;
-    const type = rawType as KitsuFavoriteItem["type"];
-    const isMedia = type === "anime" || type === "manga";
-    const name = isMedia
-      ? (item.titles?.canonical ?? "Unknown")
-      : (item.names?.canonical ?? "Unknown");
-    const imageUrl = isMedia
-      ? (item.posterImage?.original?.url ?? null)
-      : (item.image?.original?.url ?? null);
+    if (!node?.item) continue;
+
+    const item = node.item;
+    const typeName = item.__typename?.toLowerCase();
+    if (!["anime", "manga", "character", "person"].includes(typeName ?? ""))
+      continue;
+
+    const type = typeName as KitsuFavoriteItem["type"];
+
+    let name = "Unknown";
+    let imageUrl: string | null = null;
+
+    if (item.__typename === "Anime" || item.__typename === "Manga") {
+      name = item.titles?.canonical ?? "Unknown";
+      imageUrl = item.posterImage?.original?.url ?? null;
+    } else if (
+      item.__typename === "Character" ||
+      item.__typename === "Person"
+    ) {
+      name = item.names?.canonical ?? "Unknown";
+      imageUrl = item.image?.original?.url ?? null;
+    }
+
+    const id = String(node.id ?? "");
+    const slug = String(item.slug ?? "");
 
     favorites[type].push({
-      id: node.id,
-      slug: item.slug,
+      id,
+      slug,
       name,
       imageUrl,
       type,
@@ -119,13 +132,13 @@ async function fetchKitsuProfile(
     : null;
 
   return {
-    slug: base.slug,
-    name: base.name,
+    slug: base.slug ?? "",
+    name: base.name ?? "",
     about: (base.about as string | null) || null,
     avatarUrl: base.avatarImage?.original?.url ?? null,
     bannerUrl: base.bannerImage?.original?.url ?? null,
     birthday: (base.birthday as string | null) ?? null,
-    createdAt: base.createdAt as string,
+    createdAt: String(base.createdAt ?? ""),
     gender: (base.gender as string | null) ?? null,
     location: (base.location as string | null) ?? null,
     website: base.siteLinks?.nodes?.[0]?.url ?? null,
