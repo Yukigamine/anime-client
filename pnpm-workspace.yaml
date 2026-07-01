@@ -1,0 +1,7 @@
+allow-builds:
+  - '@prisma/engines'
+  - '@swc/core'
+  - esbuild
+  - prisma
+  - puppeteer
+  - sharp
