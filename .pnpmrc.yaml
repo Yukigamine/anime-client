@@ -1,3 +1,3 @@
-node-linker=hoisted
+node-linker: hoisted
 only-built-dependencies:
   - puppeteer
