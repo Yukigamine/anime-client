@@ -1,4 +1,2 @@
 only-built-dependencies:
   - puppeteer
-
-node-linker: hoisted
