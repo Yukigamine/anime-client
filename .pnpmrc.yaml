@@ -1,9 +1,4 @@
 only-built-dependencies:
   - puppeteer
 
-public-hoist-pattern:
-  - '**/kind-of'
-  - '**/clone-deep'
-  - '**/merge-deep'
-  - '**/shallow-clone'
-  - '**/global-prefix'
+shamefully-hoist: true
