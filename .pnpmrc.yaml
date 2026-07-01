@@ -2,3 +2,11 @@ only-built-dependencies:
   - puppeteer
 
 shamefully-hoist: true
+
+allow-builds:
+  - '@prisma/engines'
+  - '@swc/core'
+  - esbuild
+  - prisma
+  - puppeteer
+  - sharp
