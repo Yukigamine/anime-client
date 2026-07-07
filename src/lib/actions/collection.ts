@@ -6,14 +6,14 @@ import type {
   MangaLanguage,
   MediaFormat,
 } from "@/generated/prisma/enums";
-import type { MangaSeriesDetail } from "@/lib/cache";
 import {
   ANIME_SEARCH_KEY,
   getCached,
-  getMangaSeriesDetail,
   MANGA_SEARCH_KEY,
   setCached,
 } from "@/lib/cache";
+import type { MangaSeriesDetail } from "@/lib/kitsu/series-cache";
+import { getMangaSeriesDetail } from "@/lib/kitsu/series-cache";
 import { kitsuThunder } from "@/lib/kitsu/thunder";
 import prisma from "@/lib/prisma";
 import { requireSession } from "@/lib/session";

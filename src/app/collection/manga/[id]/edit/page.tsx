@@ -2,7 +2,7 @@ import { Box, Container, Typography } from "@mui/material";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { MangaCollectionItemForm } from "@/components/MangaCollectionItemForm";
-import { getMangaSeriesDetail } from "@/lib/cache";
+import { getMangaSeriesDetail } from "@/lib/kitsu/series-cache";
 import prisma from "@/lib/prisma";
 
 export const metadata: Metadata = {

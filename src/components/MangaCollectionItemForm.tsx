@@ -35,7 +35,7 @@ import {
   fetchMangaSeriesDetail,
   resolveMangaId,
 } from "@/lib/actions/collection";
-import type { MangaSeriesDetail } from "@/lib/cache";
+import type { MangaSeriesDetail } from "@/lib/kitsu/series-cache";
 
 type ExistingItem = {
   id: string;

@@ -30,7 +30,7 @@ import {
   editAnimeCollectionItem,
   resolveAnimeId,
 } from "@/lib/actions/collection";
-import type { AnimeSeriesDetail } from "@/lib/cache";
+import type { AnimeSeriesDetail } from "@/lib/kitsu/series-cache";
 
 type ExistingItem = {
   id: string;
