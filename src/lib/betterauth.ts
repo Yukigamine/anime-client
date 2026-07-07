@@ -1,10 +1,11 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { genericOAuth } from "better-auth/plugins";
+import { getServerBaseUrl } from "@/lib/base-url";
 import prisma from "@/lib/prisma";
 
 const AUTHORIZED_EMAIL = process.env.AUTHORIZED_EMAIL;
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+const APP_URL = getServerBaseUrl();
 
 const customOAuthPlugin =
   process.env.CUSTOM_OAUTH_CLIENT_ID && process.env.CUSTOM_OAUTH_CLIENT_SECRET

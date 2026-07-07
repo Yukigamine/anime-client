@@ -12,7 +12,6 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { authClient } from "@/lib/betterauth-client";
@@ -45,12 +44,17 @@ const PROVIDER_SVGS: Record<string, string> = {
 function ProviderIcon({ provider }: { provider: LoginProvider }) {
   if (provider.iconUrl) {
     return (
-      <Image
+      <Box
+        component="img"
         src={provider.iconUrl}
         alt=""
-        width={20}
-        height={20}
-        style={{ display: "block" }}
+        sx={{
+          width: 20,
+          height: 20,
+          display: "block",
+          objectFit: "contain",
+          flexShrink: 0,
+        }}
       />
     );
   }

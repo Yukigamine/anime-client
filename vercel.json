@@ -1,3 +1,0 @@
-{
-  "buildCommand": "pnpm install --ignore-scripts && pnpm build"
-}
