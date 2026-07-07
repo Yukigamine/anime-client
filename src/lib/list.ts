@@ -7,14 +7,14 @@ import type {
   ReadStatus,
   WatchStatus,
 } from "@/generated/prisma/client";
+import prisma from "./prisma";
 import {
   ANIME_LIST_KEY,
   getCached,
   LIST_TTL,
   MANGA_LIST_KEY,
   setCached,
-} from "./cache";
-import prisma from "./prisma";
+} from "./redis";
 
 export type AnimeWithEntry = Anime & { listEntry: AnimeListEntry | null };
 export type MangaWithEntry = Manga & { listEntry: MangaListEntry | null };

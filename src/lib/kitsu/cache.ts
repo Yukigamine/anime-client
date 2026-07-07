@@ -1,12 +1,12 @@
 import "server-only";
+import { kitsuThunder } from "@/lib/kitsu/thunder";
 import {
   ANIME_SERIES_KEY,
   computeSeriesTTL,
   getCached,
   MANGA_SERIES_KEY,
   setCached,
-} from "@/lib/cache";
-import { kitsuThunder } from "@/lib/kitsu/thunder";
+} from "@/lib/redis";
 
 export type AnimeSeriesDetail = {
   kitsuId: string;

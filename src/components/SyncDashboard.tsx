@@ -31,11 +31,13 @@ import {
   deleteInvalidEntriesAction,
   findInvalidEntriesAction,
   getSyncStatusAction,
-  type InvalidEntriesResult,
   normalizeInvalidRatingsAction,
-  type SyncStatusPayload,
   triggerSyncAction,
 } from "@/lib/actions";
+import type {
+  InvalidEntriesResult,
+  SyncStatusPayload,
+} from "@/lib/actions/sync";
 
 const PROVIDER_LABELS = { KITSU: "Kitsu", ANILIST: "AniList" } as const;
 
