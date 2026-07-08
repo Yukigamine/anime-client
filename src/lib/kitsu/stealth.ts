@@ -1,5 +1,6 @@
 import "server-only";
 import type { Browser, LaunchOptions } from "puppeteer-core";
+import { getServerBaseUrl } from "@/lib/base-url";
 
 interface StealthResponse {
   status: number;
@@ -36,15 +37,48 @@ function isLikelyCloudflareChallenge(result: StealthResponse): boolean {
 
 const isVercel = Boolean(process.env.VERCEL_ENV);
 
-const deploymentHost =
-  process.env.VERCEL_URL ?? process.env.VERCEL_BRANCH_URL ?? null;
+function resolveChromiumPackUrl(): string | null {
+  const baseUrl = getServerBaseUrl();
+  if (baseUrl) {
+    return `${baseUrl}/chromium-pack.tar`;
+  }
 
-const CHROMIUM_PACK_URL =
-  process.env.CHROMIUM_PACK_URL ??
-  (deploymentHost ? `https://${deploymentHost}/chromium-pack.tar` : null);
+  return null;
+}
+
+const CHROMIUM_PACK_URL = resolveChromiumPackUrl();
 
 let cachedExecutablePath: string | null = null;
 let downloadPromise: Promise<string> | null = null;
+
+async function validateChromiumPackUrl(url: string): Promise<void> {
+  const response = await fetch(url, {
+    headers: { Range: "bytes=0-511" },
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Chromium pack URL returned HTTP ${response.status}: ${url}`,
+    );
+  }
+
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const magic = new TextDecoder().decode(bytes.slice(257, 262));
+
+  if (magic === "ustar") {
+    return;
+  }
+
+  const preview = new TextDecoder()
+    .decode(bytes.slice(0, 160))
+    .replace(/\s+/g, " ")
+    .trim();
+
+  throw new Error(
+    `Chromium pack URL did not return a valid tar archive: ${url} (preview: ${preview || "<binary>"})`,
+  );
+}
 
 async function getChromiumExecutablePath(): Promise<string> {
   if (!isVercel) {
@@ -55,12 +89,18 @@ async function getChromiumExecutablePath(): Promise<string> {
 
   if (!CHROMIUM_PACK_URL) {
     throw new Error(
-      "Unable to resolve CHROMIUM_PACK_URL. Set CHROMIUM_PACK_URL or ensure VERCEL_URL is available.",
+      "Unable to resolve CHROMIUM_PACK_URL. Set CHROMIUM_PACK_URL or configure the shared app base URL envs.",
     );
   }
 
   if (!downloadPromise) {
     downloadPromise = (async () => {
+      console.log(
+        "[Kitsu Stealth] Resolving Chromium pack URL:",
+        CHROMIUM_PACK_URL,
+      );
+      await validateChromiumPackUrl(CHROMIUM_PACK_URL);
+
       const chromium = (await import("@sparticuz/chromium-min")).default;
       const executablePath = await chromium.executablePath(CHROMIUM_PACK_URL);
       cachedExecutablePath = executablePath;
