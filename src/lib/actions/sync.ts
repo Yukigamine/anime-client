@@ -1,10 +1,8 @@
 "use server";
 
 import type { SyncLog } from "@/generated/prisma/client";
-import { pullAniList, pushAniList } from "@/lib/anilist/sync";
 import { getAuthStatus } from "@/lib/auth";
 import { ensureValidKitsuToken } from "@/lib/kitsu/auth";
-import { pullKitsu, pushKitsu } from "@/lib/kitsu/sync";
 import prisma from "@/lib/prisma";
 import { invalidateListCache } from "@/lib/redis";
 import { requireSession } from "@/lib/session";
@@ -57,8 +55,10 @@ export async function triggerSyncAction(
 
   try {
     if (provider === "KITSU") {
+      const { pullKitsu, pushKitsu } = await import("@/lib/kitsu/sync");
       direction === "PULL" ? await pullKitsu(log.id) : await pushKitsu(log.id);
     } else {
+      const { pullAniList, pushAniList } = await import("@/lib/anilist/sync");
       direction === "PULL"
         ? await pullAniList(log.id)
         : await pushAniList(log.id);
