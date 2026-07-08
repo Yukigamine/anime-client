@@ -16,7 +16,7 @@
     "knip:deps": "knip --dependencies",
     "postinstall": "node scripts/postinstall.mjs",
     "prepare": "prisma generate && husky",
-    "deploy": "prisma generate && prisma migrate deploy && next build",
+    "deploy": "prisma generate && prisma migrate deploy && next build && node scripts/postinstall.mjs",
     "db-edit": "prisma studio",
     "db-init": "prisma migrate reset",
     "zeus:kitsu": "tsx scripts/zeus-gen.ts https://kitsu.app/api/graphql src/lib/zeus/kitsu --graphql=graphql/kitsu.schema.graphql",
