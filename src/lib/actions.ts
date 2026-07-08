@@ -1,7 +1,6 @@
 "use server";
 
 import {
-  loginKitsuAction as loginKitsuActionImpl,
   logoutAndRedirectAction as logoutAndRedirectActionImpl,
   logoutAppAction as logoutAppActionImpl,
 } from "./actions/auth";
@@ -13,10 +12,6 @@ import {
   triggerSyncAction as triggerSyncActionImpl,
 } from "./actions/sync";
 import type { SyncDirection, SyncProvider } from "./actions/types";
-
-export async function loginKitsuAction(formData: FormData) {
-  return loginKitsuActionImpl(formData);
-}
 
 export async function logoutAndRedirectAction(provider: SyncProvider) {
   return logoutAndRedirectActionImpl(provider);

@@ -1,6 +1,8 @@
+import { Box } from "@mui/material";
 import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import Footer from "@/components/footer";
 import NavBar from "@/components/NavBar";
 import Providers from "@/components/Providers";
 
@@ -27,8 +29,19 @@ export default function RootLayout({
       <body>
         <InitColorSchemeScript attribute="class" defaultMode="system" />
         <Providers>
-          <NavBar />
-          {children}
+          <Box
+            sx={{
+              minHeight: "100dvh",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <NavBar />
+            <Box component="main" sx={{ flex: 1 }}>
+              {children}
+            </Box>
+            <Footer />
+          </Box>
         </Providers>
       </body>
     </html>

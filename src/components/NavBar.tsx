@@ -35,7 +35,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import ColorSchemeToggle from "@/components/ColorSchemeToggle";
-import { logoutAppAction } from "@/lib/actions";
+import { logoutAppAction } from "@/lib/actions/auth";
 import { authClient } from "@/lib/betterauth-client";
 
 // Generate a Gravatar URL from email using SHA256 hash

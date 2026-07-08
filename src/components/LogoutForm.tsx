@@ -12,7 +12,7 @@ import {
 } from "@mui/material";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { logoutAppAction } from "@/lib/actions";
+import { logoutAppAction } from "@/lib/actions/auth";
 
 interface LogoutFormProps {
   user: {

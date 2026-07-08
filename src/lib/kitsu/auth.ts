@@ -1,58 +1,35 @@
 import "server-only";
 import { getToken, saveToken } from "@/lib/auth";
-import { kitsuFetch } from "@/lib/kitsu/stealth";
 import { Zeus } from "@/lib/zeus/kitsu";
 
 const KITSU_GRAPHQL =
   process.env.KITSU_API_URL ?? "https://kitsu.app/api/graphql";
-const KITSU_OAUTH =
+const KITSU_TOKEN_URL =
   process.env.KITSU_OAUTH_URL ?? "https://kitsu.app/api/oauth/token";
 
 interface KitsuTokenResponse {
   access_token: string;
-  refresh_token: string;
+  refresh_token?: string;
   expires_in: number;
-  token_type: string;
 }
 
-function logKitsuError(
-  url: string,
-  status: number,
-  responseText: string,
-): void {
-  const preview = responseText.substring(0, 500);
-  const isHtml =
-    responseText.includes("<!DOCTYPE") || responseText.includes("<html");
-  const isCloudflareChallenge =
-    responseText.includes("Cloudflare") ||
-    responseText.includes("cf_clearance");
-
-  console.error(`[Kitsu Error] ${status} from ${url}`, {
-    isHtmlResponse: isHtml,
-    isCloudflareChallenge,
-    responsePreview: preview,
-    responseLength: responseText.length,
-  });
-}
-
-function checkCloudflareChallenge(
-  status: number,
-  headers: Record<string, string>,
-  body: string,
-): void {
-  const cfMitigated = headers["cf-mitigated"];
-  if (cfMitigated === "challenge") {
-    throw new Error(
-      "Cloudflare challenge detected — Kitsu API is blocking requests",
-    );
+async function parseTokenResponse(res: Response): Promise<KitsuTokenResponse> {
+  if (!res.ok) {
+    let errorMsg = `HTTP ${res.status}`;
+    try {
+      const data = (await res.json()) as {
+        error?: string;
+        error_description?: string;
+      };
+      if (data.error_description) errorMsg = data.error_description;
+      else if (data.error) errorMsg = data.error;
+    } catch {
+      // Fallback for non-JSON responses.
+    }
+    throw new Error(`Kitsu token exchange failed: ${errorMsg}`);
   }
-  // Fallback: detect Cloudflare HTML even without the header
-  if (
-    status === 403 &&
-    (body.includes("<!DOCTYPE") || body.includes("Cloudflare"))
-  ) {
-    throw new Error(`Cloudflare blocked request (${status})`);
-  }
+
+  return (await res.json()) as KitsuTokenResponse;
 }
 
 async function fetchCurrentProfile(
@@ -63,7 +40,7 @@ async function fetchCurrentProfile(
       currentProfile: { id: true, slug: true, name: true },
     });
 
-    const res = await kitsuFetch(KITSU_GRAPHQL, {
+    const res = await fetch(KITSU_GRAPHQL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -71,116 +48,80 @@ async function fetchCurrentProfile(
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify({ query }),
+      cache: "no-store",
     });
 
-    console.log(`[Kitsu] fetchCurrentProfile ${res.status}`, {
-      cfMitigated: res.headers["cf-mitigated"],
-    });
+    if (!res.ok) return null;
 
-    checkCloudflareChallenge(res.status, res.headers, res.body);
-    if (res.status < 200 || res.status >= 300) return null;
-
-    const body = JSON.parse(res.body) as {
+    const body = (await res.json()) as {
       data?: {
         currentProfile: { id: string; slug: string; name: string } | null;
       };
     };
     return body.data?.currentProfile ?? null;
   } catch (err) {
-    console.error("[Kitsu] fetchCurrentProfile error:", err);
+    console.error("Failed to fetch Kitsu profile:", err);
     return null;
   }
 }
 
-export async function loginKitsu(
-  username: string,
-  password: string,
-  totp?: string,
-): Promise<string> {
-  const params: Record<string, string> = {
-    grant_type: "password",
-    username,
-    password,
-  };
-  if (totp) params.totp = totp;
+type PersistKitsuTokenInput = {
+  accessToken: string;
+  refreshToken?: string | null;
+  expiresIn: number;
+  fallbackUsername?: string | null;
+};
 
-  console.log(`[Kitsu] loginKitsu → ${KITSU_OAUTH}`);
-
-  const res = await kitsuFetch(KITSU_OAUTH, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "*/*",
-    },
-    body: new URLSearchParams(params).toString(),
-  });
-
-  console.log(`[Kitsu] loginKitsu ${res.status}`, {
-    cfMitigated: res.headers["cf-mitigated"],
-    contentType: res.headers["content-type"],
-  });
-
-  checkCloudflareChallenge(res.status, res.headers, res.body);
-
-  if (res.status < 200 || res.status >= 300) {
-    logKitsuError(KITSU_OAUTH, res.status, res.body);
-    let errorMsg = `Kitsu login failed (${res.status})`;
-    try {
-      const data = JSON.parse(res.body);
-      if (data.error) errorMsg = `${data.error} (${res.status})`;
-    } catch {
-      // Non-JSON response
-    }
-    throw new Error(errorMsg);
-  }
-
-  const data = JSON.parse(res.body) as KitsuTokenResponse;
-  const profile = await fetchCurrentProfile(data.access_token);
-  const expiresAt = new Date(Date.now() + data.expires_in * 1000);
+export async function persistKitsuToken({
+  accessToken,
+  refreshToken,
+  expiresIn,
+  fallbackUsername,
+}: PersistKitsuTokenInput): Promise<{ username: string | null }> {
+  const profile = await fetchCurrentProfile(accessToken);
+  const expiresAt = new Date(Date.now() + expiresIn * 1000);
+  const username = profile?.slug ?? profile?.name ?? fallbackUsername ?? null;
 
   await saveToken("KITSU", {
-    accessToken: data.access_token,
-    refreshToken: data.refresh_token,
+    accessToken,
+    refreshToken: refreshToken ?? null,
     expiresAt,
     providerUserId: profile?.id ?? null,
-    username: profile?.slug ?? profile?.name ?? username,
+    username,
   });
 
-  return data.access_token;
+  return { username };
 }
 
 async function refreshKitsuToken(refreshToken: string): Promise<string> {
-  console.log(`[Kitsu] refreshKitsuToken → ${KITSU_OAUTH}`);
+  const clientId = process.env.KITSU_CLIENT_ID ?? "";
+  const clientSecret = process.env.KITSU_CLIENT_SECRET ?? "";
 
-  const res = await kitsuFetch(KITSU_OAUTH, {
+  const res = await fetch(KITSU_TOKEN_URL, {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "*/*",
+      Accept: "application/json",
     },
-    body: new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-    }).toString(),
+    body: new URLSearchParams(
+      Object.fromEntries(
+        [
+          ["grant_type", "refresh_token"],
+          ["refresh_token", refreshToken],
+          ["client_id", clientId],
+          ["client_secret", clientSecret],
+        ].filter(([, value]) => value !== ""),
+      ),
+    ),
+    cache: "no-store",
   });
 
-  console.log(`[Kitsu] refreshKitsuToken ${res.status}`, {
-    cfMitigated: res.headers["cf-mitigated"],
-  });
-
-  checkCloudflareChallenge(res.status, res.headers, res.body);
-
-  if (res.status < 200 || res.status >= 300) {
-    logKitsuError(KITSU_OAUTH, res.status, res.body);
-    throw new Error(`Kitsu token refresh failed (${res.status})`);
-  }
-
-  const data = JSON.parse(res.body) as KitsuTokenResponse;
+  const data = await parseTokenResponse(res);
   const expiresAt = new Date(Date.now() + data.expires_in * 1000);
 
   await saveToken("KITSU", {
     accessToken: data.access_token,
-    refreshToken: data.refresh_token,
+    refreshToken: data.refresh_token ?? refreshToken,
     expiresAt,
   });
 

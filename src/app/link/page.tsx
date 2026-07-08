@@ -11,7 +11,7 @@ import {
   Typography,
 } from "@mui/material";
 import type { Metadata } from "next";
-import { logoutAndRedirectAction } from "@/lib/actions";
+import { logoutAndRedirectAction } from "@/lib/actions/auth";
 import { getAuthStatus } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 
@@ -80,8 +80,9 @@ export default async function LoginPage({
             )}
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Sign in with your Kitsu username and password using the OAuth
-            password grant.
+            Sign in with your Kitsu username and password. Credentials are sent
+            directly from your browser to Kitsu, and only token data is sent
+            back to this app.
           </Typography>
           <Divider sx={{ mb: 2 }} />
           <Box sx={{ display: "flex", gap: 1 }}>

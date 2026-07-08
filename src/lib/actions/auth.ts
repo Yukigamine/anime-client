@@ -2,47 +2,43 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { deleteToken, getToken } from "@/lib/auth";
+import { deleteToken } from "@/lib/auth";
 import { auth } from "@/lib/betterauth";
-import { loginKitsu } from "@/lib/kitsu/auth";
+import { persistKitsuToken } from "@/lib/kitsu/auth";
 import { getSession, requireSession } from "@/lib/session";
 import type { ActionResult, SyncProvider } from "./types";
 
-export async function loginKitsuAction(
-  formData: FormData,
-): Promise<ActionResult> {
-  const username = formData.get("username") as string;
-  const password = formData.get("password") as string;
+type SaveKitsuTokenInput = {
+  accessToken: string;
+  refreshToken?: string | null;
+  expiresIn: number;
+  fallbackUsername?: string | null;
+};
 
-  if (!username || !password) {
-    return { ok: false, error: "Username and password are required" };
+export async function saveKitsuTokenAction(
+  input: SaveKitsuTokenInput,
+): Promise<ActionResult> {
+  await requireSession();
+
+  if (!input.accessToken || !Number.isFinite(input.expiresIn)) {
+    return { ok: false, error: "Invalid token payload" };
   }
 
   const requiredUsername = process.env.NEXT_PUBLIC_KITSU_USERNAME;
-  if (
-    requiredUsername &&
-    username.toLowerCase() !== requiredUsername.toLowerCase()
-  ) {
-    return {
-      ok: false,
-      error: `This app is configured for "${requiredUsername}". Sign in with that account.`,
-    };
-  }
 
   try {
-    await loginKitsu(username, password);
+    const { username } = await persistKitsuToken(input);
 
-    if (requiredUsername) {
-      const stored = await getToken("KITSU");
-      if (
-        stored?.username &&
-        stored.username.toLowerCase() !== requiredUsername.toLowerCase()
-      ) {
-        return {
-          ok: false,
-          error: `Authenticated as "${stored.username}" but this app requires "${requiredUsername}".`,
-        };
-      }
+    if (
+      requiredUsername &&
+      username &&
+      username.toLowerCase() !== requiredUsername.toLowerCase()
+    ) {
+      await deleteToken("KITSU");
+      return {
+        ok: false,
+        error: `Authenticated as "${username}" but this app requires "${requiredUsername}".`,
+      };
     }
 
     return { ok: true, data: undefined };
