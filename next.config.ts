@@ -14,10 +14,9 @@ const nextConfig: NextConfig = {
   turbopack: {},
   reactStrictMode: true,
   serverExternalPackages: [
+    "@sparticuz/chromium-min",
     "puppeteer",
-    "puppeteer-extra",
-    "puppeteer-extra-plugin-stealth",
-    "puppeteer-extra-plugin-recaptcha",
+    "puppeteer-core",
   ],
   trailingSlash: false,
   images: {
