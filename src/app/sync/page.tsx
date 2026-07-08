@@ -5,6 +5,7 @@ import SyncDashboard from "@/components/SyncDashboard";
 import { getSession } from "@/lib/session";
 
 export const metadata: Metadata = { title: "Sync – Anime Client" };
+export const runtime = "nodejs";
 
 export default async function SyncPage() {
   const session = await getSession();
