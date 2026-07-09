@@ -1,6 +1,33 @@
 import "server-only";
-import type { Browser, LaunchOptions } from "puppeteer-core";
+import type { LaunchOptions } from "puppeteer-core";
+import { addExtra } from "puppeteer-extra";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
 import { getServerBaseUrl } from "@/lib/base-url";
+
+type AddExtraInput = Parameters<typeof addExtra>[0];
+
+function toAddExtraInput(
+  puppeteerLib: Pick<
+    AddExtraInput,
+    "connect" | "defaultArgs" | "executablePath" | "launch"
+  > & { createBrowserFetcher?: AddExtraInput["createBrowserFetcher"] },
+): AddExtraInput {
+  const { connect, defaultArgs, executablePath, launch } = puppeteerLib;
+
+  const createBrowserFetcher: AddExtraInput["createBrowserFetcher"] =
+    puppeteerLib.createBrowserFetcher ??
+    (() => {
+      throw new Error("createBrowserFetcher is not supported in Puppeteer v25");
+    });
+
+  return {
+    connect,
+    defaultArgs,
+    executablePath,
+    launch,
+    createBrowserFetcher,
+  };
+}
 
 interface StealthResponse {
   status: number;
@@ -114,10 +141,12 @@ async function getChromiumExecutablePath(): Promise<string> {
   return downloadPromise;
 }
 
-async function launchBrowser(): Promise<Browser> {
+async function launchBrowser() {
   if (isVercel) {
     const chromium = (await import("@sparticuz/chromium-min")).default;
-    const puppeteer = await import("puppeteer-core");
+    const puppeteerCore = await import("puppeteer-core");
+    const puppeteer = addExtra(toAddExtraInput(puppeteerCore));
+    puppeteer.use(StealthPlugin());
     const executablePath = await getChromiumExecutablePath();
 
     const launchOptions: LaunchOptions = {
@@ -129,7 +158,9 @@ async function launchBrowser(): Promise<Browser> {
     return puppeteer.launch(launchOptions);
   }
 
-  const puppeteer = await import("puppeteer");
+  const puppeteerLib = await import("puppeteer");
+  const puppeteer = addExtra(toAddExtraInput(puppeteerLib));
+  puppeteer.use(StealthPlugin());
   return puppeteer.launch({
     headless: true,
     args: [

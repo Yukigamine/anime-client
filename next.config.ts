@@ -17,6 +17,8 @@ const nextConfig: NextConfig = {
     "@sparticuz/chromium-min",
     "puppeteer",
     "puppeteer-core",
+    "puppeteer-extra",
+    "puppeteer-extra-plugin-stealth",
   ],
   trailingSlash: false,
   images: {
