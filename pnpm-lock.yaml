@@ -44,6 +44,18 @@ importers:
       better-auth:
         specifier: ^1.6.23
         version: 1.6.23(@prisma/client@7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@6.0.3))(typescript@6.0.3))(mysql2@3.15.3)(next@16.2.6(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(pg@8.22.0)(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@6.0.3))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      for-own:
+        specifier: 0.1.5
+        version: 0.1.5
+      is-plain-object:
+        specifier: 2.0.4
+        version: 2.0.4
+      kind-of:
+        specifier: 3.2.2
+        version: 3.2.2
+      lazy-cache:
+        specifier: 1.0.4
+        version: 1.0.4
       next:
         specifier: 16.2.6
         version: 16.2.6(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -74,6 +86,9 @@ importers:
       redis:
         specifier: 4.7.0
         version: 4.7.0
+      shallow-clone:
+        specifier: 0.1.2
+        version: 0.1.2
       swr:
         specifier: 2.4.1
         version: 2.4.1(react@19.2.6)

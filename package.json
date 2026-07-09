@@ -35,6 +35,10 @@
     "@sparticuz/chromium": "^149.0.0",
     "@sparticuz/chromium-min": "^149.0.0",
     "better-auth": "^1.6.23",
+    "for-own": "0.1.5",
+    "is-plain-object": "2.0.4",
+    "kind-of": "3.2.2",
+    "lazy-cache": "1.0.4",
     "next": "16.2.6",
     "notistack": "3.0.2",
     "prisma": "7.8.0",
@@ -45,6 +49,7 @@
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "redis": "4.7.0",
+    "shallow-clone": "0.1.2",
     "swr": "2.4.1"
   },
   "devDependencies": {
