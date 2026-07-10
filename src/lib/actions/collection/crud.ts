@@ -1,12 +1,14 @@
 "use server";
 
-import { kitsuThunder } from "@/lib/kitsu/thunder";
+import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 import type {
   ActionResult,
   AnimeCollectionItemInput,
+  AnimeResolvePayload,
   MangaCollectionItemInput,
+  MangaResolvePayload,
 } from "./types";
 
 export async function addAnimeCollectionItem(
@@ -179,70 +181,62 @@ export async function deleteMangaCollectionItem(
   }
 }
 
+const AnimeResolvePayloadSchema = z.object({
+  kitsuId: z.string().min(1),
+  anilistId: z.number().int().nullable().optional(),
+  malId: z.number().int().nullable().optional(),
+  titleEn: z.string().nullable().optional(),
+  titleRomaji: z.string().nullable().optional(),
+  titleJp: z.string().nullable().optional(),
+  episodeCount: z.number().int().nullable().optional(),
+  averageRating: z.number().nullable().optional(),
+  coverImageUrl: z.string().nullable().optional(),
+  bannerImageUrl: z.string().nullable().optional(),
+});
+
+const MangaResolvePayloadSchema = z.object({
+  kitsuId: z.string().min(1),
+  anilistId: z.number().int().nullable().optional(),
+  malId: z.number().int().nullable().optional(),
+  titleEn: z.string().nullable().optional(),
+  titleRomaji: z.string().nullable().optional(),
+  titleJp: z.string().nullable().optional(),
+  chapterCount: z.number().int().nullable().optional(),
+  volumeCount: z.number().int().nullable().optional(),
+  averageRating: z.number().nullable().optional(),
+  coverImageUrl: z.string().nullable().optional(),
+});
+
 export async function resolveAnimeId(
-  kitsuId: string,
+  payload: AnimeResolvePayload,
 ): Promise<ActionResult<string>> {
   try {
+    await requireSession();
+    const parsed = AnimeResolvePayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      return { ok: false, error: parsed.error.message };
+    }
+
+    const data = parsed.data;
     const existing = await prisma.anime.findUnique({
-      where: { kitsuId },
+      where: { kitsuId: data.kitsuId },
       select: { id: true },
     });
     if (existing) return { ok: true, data: existing.id };
 
-    const result = await kitsuThunder("query")({
-      findAnimeBySlug: [
-        { slug: kitsuId },
-        {
-          id: true,
-          titles: { canonical: true, romanized: true, original: true },
-          episodeCount: true,
-          status: true,
-          startDate: true,
-          endDate: true,
-          averageRating: true,
-          posterImage: { original: { url: true } },
-          bannerImage: { original: { url: true } },
-          mappings: [
-            { first: 10 },
-            { nodes: { externalId: true, externalSite: true } },
-          ],
-        },
-      ],
-    });
-
-    const anime = result.findAnimeBySlug;
-    if (!anime) return { ok: false, error: "Anime not found on Kitsu" };
-
-    const { MappingExternalSiteEnum } = await import("@/lib/zeus/kitsu");
-    const mappings = anime.mappings?.nodes ?? [];
-    const anilistId =
-      mappings
-        .filter(
-          (m) => m?.externalSite === MappingExternalSiteEnum.ANILIST_ANIME,
-        )
-        .map((m) => Number(m?.externalId))
-        .find(Boolean) ?? null;
-    const malId =
-      mappings
-        .filter(
-          (m) => m?.externalSite === MappingExternalSiteEnum.MYANIMELIST_ANIME,
-        )
-        .map((m) => Number(m?.externalId))
-        .find(Boolean) ?? null;
-
     const created = await prisma.anime.create({
       data: {
-        kitsuId,
-        anilistId,
-        malId,
-        titleEn: anime.titles?.canonical ?? null,
-        titleRomaji: anime.titles?.romanized ?? null,
-        titleJp: anime.titles?.original ?? null,
-        episodeCount: anime.episodeCount ?? null,
+        kitsuId: data.kitsuId,
+        anilistId: data.anilistId ?? null,
+        malId: data.malId ?? null,
+        titleEn: data.titleEn ?? null,
+        titleRomaji: data.titleRomaji ?? null,
+        titleJp: data.titleJp ?? null,
+        episodeCount: data.episodeCount ?? null,
         showStatus: "UNKNOWN",
-        averageRating: anime.averageRating ?? null,
-        coverImageUrl: anime.posterImage?.original?.url ?? null,
-        bannerImageUrl: anime.bannerImage?.original?.url ?? null,
+        averageRating: data.averageRating ?? null,
+        coverImageUrl: data.coverImageUrl ?? null,
+        bannerImageUrl: data.bannerImageUrl ?? null,
       },
     });
     return { ok: true, data: created.id };
@@ -253,70 +247,35 @@ export async function resolveAnimeId(
 }
 
 export async function resolveMangaId(
-  kitsuId: string,
+  payload: MangaResolvePayload,
 ): Promise<ActionResult<string>> {
   try {
+    await requireSession();
+    const parsed = MangaResolvePayloadSchema.safeParse(payload);
+    if (!parsed.success) {
+      return { ok: false, error: parsed.error.message };
+    }
+
+    const data = parsed.data;
     const existing = await prisma.manga.findUnique({
-      where: { kitsuId },
+      where: { kitsuId: data.kitsuId },
       select: { id: true },
     });
     if (existing) return { ok: true, data: existing.id };
 
-    const result = await kitsuThunder("query")({
-      findMangaBySlug: [
-        { slug: kitsuId },
-        {
-          id: true,
-          titles: { canonical: true, romanized: true, original: true },
-          chapterCount: true,
-          chapterCountGuess: true,
-          volumeCount: true,
-          status: true,
-          startDate: true,
-          endDate: true,
-          averageRating: true,
-          posterImage: { original: { url: true } },
-          mappings: [
-            { first: 10 },
-            { nodes: { externalId: true, externalSite: true } },
-          ],
-        },
-      ],
-    });
-
-    const manga = result.findMangaBySlug;
-    if (!manga) return { ok: false, error: "Manga not found on Kitsu" };
-
-    const { MappingExternalSiteEnum } = await import("@/lib/zeus/kitsu");
-    const mappings = manga.mappings?.nodes ?? [];
-    const anilistId =
-      mappings
-        .filter(
-          (m) => m?.externalSite === MappingExternalSiteEnum.ANILIST_MANGA,
-        )
-        .map((m) => Number(m?.externalId))
-        .find(Boolean) ?? null;
-    const malId =
-      mappings
-        .filter(
-          (m) => m?.externalSite === MappingExternalSiteEnum.MYANIMELIST_MANGA,
-        )
-        .map((m) => Number(m?.externalId))
-        .find(Boolean) ?? null;
-
     const created = await prisma.manga.create({
       data: {
-        kitsuId,
-        anilistId,
-        malId,
-        titleEn: manga.titles?.canonical ?? null,
-        titleRomaji: manga.titles?.romanized ?? null,
-        titleJp: manga.titles?.original ?? null,
-        chapterCount: manga.chapterCount ?? manga.chapterCountGuess ?? null,
-        volumeCount: manga.volumeCount ?? null,
+        kitsuId: data.kitsuId,
+        anilistId: data.anilistId ?? null,
+        malId: data.malId ?? null,
+        titleEn: data.titleEn ?? null,
+        titleRomaji: data.titleRomaji ?? null,
+        titleJp: data.titleJp ?? null,
+        chapterCount: data.chapterCount ?? null,
+        volumeCount: data.volumeCount ?? null,
         showStatus: "UNKNOWN",
-        averageRating: manga.averageRating ?? null,
-        coverImageUrl: manga.posterImage?.original?.url ?? null,
+        averageRating: data.averageRating ?? null,
+        coverImageUrl: data.coverImageUrl ?? null,
       },
     });
     return { ok: true, data: created.id };

@@ -91,8 +91,10 @@ export default function KitsuLoginForm({
         return;
       }
 
-      router.push("/sync");
-      router.refresh();
+      enqueueSnackbar("Kitsu account linked successfully.", {
+        variant: "success",
+      });
+      router.push("/link");
     } catch {
       enqueueSnackbar(
         "Unable to authenticate with Kitsu from the browser. Check CORS/network settings and try again.",

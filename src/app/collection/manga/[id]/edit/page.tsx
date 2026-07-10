@@ -2,7 +2,6 @@ import { Box, Container, Typography } from "@mui/material";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { MangaCollectionItemForm } from "@/components/MangaCollectionItemForm";
-import { getMangaSeriesDetail } from "@/lib/kitsu/cache";
 import prisma from "@/lib/prisma";
 
 export const metadata: Metadata = {
@@ -19,11 +18,6 @@ export default async function EditMangaCollectionItemPage({ params }: Props) {
   });
 
   if (!item) notFound();
-
-  // Fetch Kitsu series detail for volume/chapter totals
-  const seriesDetail = item.manga.kitsuId
-    ? await getMangaSeriesDetail(item.manga.kitsuId)
-    : null;
 
   const initialData = {
     id: item.id,
@@ -55,10 +49,7 @@ export default async function EditMangaCollectionItemPage({ params }: Props) {
           {title}
         </Typography>
       </Box>
-      <MangaCollectionItemForm
-        initialData={initialData}
-        seriesDetail={seriesDetail}
-      />
+      <MangaCollectionItemForm initialData={initialData} />
     </Container>
   );
 }

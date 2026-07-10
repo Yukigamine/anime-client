@@ -17,6 +17,32 @@ export type KitsuSearchResult = {
   posterUrl: string | null;
 };
 
+export type AnimeResolvePayload = {
+  kitsuId: string;
+  anilistId?: number | null;
+  malId?: number | null;
+  titleEn?: string | null;
+  titleRomaji?: string | null;
+  titleJp?: string | null;
+  episodeCount?: number | null;
+  averageRating?: number | null;
+  coverImageUrl?: string | null;
+  bannerImageUrl?: string | null;
+};
+
+export type MangaResolvePayload = {
+  kitsuId: string;
+  anilistId?: number | null;
+  malId?: number | null;
+  titleEn?: string | null;
+  titleRomaji?: string | null;
+  titleJp?: string | null;
+  chapterCount?: number | null;
+  volumeCount?: number | null;
+  averageRating?: number | null;
+  coverImageUrl?: string | null;
+};
+
 export type AnimeCollectionItemInput = {
   animeId: string;
   rarity: CollectionRarity;

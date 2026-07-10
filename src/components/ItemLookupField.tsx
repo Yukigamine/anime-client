@@ -12,9 +12,9 @@ import {
 import { useEffect, useRef, useState } from "react";
 import type { KitsuSearchResult } from "@/lib/actions/collection";
 import {
-  searchAnimeByTitle,
-  searchMangaByTitle,
-} from "@/lib/actions/collection";
+  searchAnimeByTitleClient,
+  searchMangaByTitleClient,
+} from "@/lib/kitsu/client-queries";
 
 type Props = {
   type: "anime" | "manga";
@@ -48,11 +48,13 @@ export function ItemLookupField({
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const result =
+        const items =
           type === "anime"
-            ? await searchAnimeByTitle(inputValue)
-            : await searchMangaByTitle(inputValue);
-        if (result.ok) setOptions(result.data);
+            ? await searchAnimeByTitleClient(inputValue)
+            : await searchMangaByTitleClient(inputValue);
+        setOptions(items);
+      } catch {
+        setOptions([]);
       } finally {
         setLoading(false);
       }

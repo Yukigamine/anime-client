@@ -2,7 +2,6 @@ import { Box, Container, Typography } from "@mui/material";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { AnimeCollectionItemForm } from "@/components/AnimeCollectionItemForm";
-import { getAnimeSeriesDetail } from "@/lib/kitsu/cache";
 import prisma from "@/lib/prisma";
 
 export const metadata: Metadata = {
@@ -19,10 +18,6 @@ export default async function EditAnimeCollectionItemPage({ params }: Props) {
   });
 
   if (!item) notFound();
-
-  const seriesDetail = item.anime.kitsuId
-    ? await getAnimeSeriesDetail(item.anime.kitsuId)
-    : null;
 
   const initialData = {
     id: item.id,
@@ -54,10 +49,7 @@ export default async function EditAnimeCollectionItemPage({ params }: Props) {
           {title}
         </Typography>
       </Box>
-      <AnimeCollectionItemForm
-        initialData={initialData}
-        seriesDetail={seriesDetail}
-      />
+      <AnimeCollectionItemForm initialData={initialData} />
     </Container>
   );
 }

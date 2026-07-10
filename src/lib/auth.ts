@@ -1,100 +1,112 @@
-import "server-only";
-import { cookies } from "next/headers";
-import type { Provider } from "@/generated/prisma/client";
-import prisma from "./prisma";
+import { betterAuth } from "better-auth";
+import { prismaAdapter } from "better-auth/adapters/prisma";
+import { genericOAuth } from "better-auth/plugins";
+import { getServerBaseUrl } from "@/lib/base-url";
+import prisma from "@/lib/prisma";
 
-const COOKIE_OPTS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "lax" as const,
-  path: "/",
-  maxAge: 60 * 60 * 24 * 30, // 30 days
-};
+const AUTHORIZED_EMAIL = process.env.AUTHORIZED_EMAIL;
+const APP_URL = getServerBaseUrl();
 
-const COOKIE_NAMES: Record<Provider, string> = {
-  KITSU: "kitsu_access_token",
-  ANILIST: "anilist_access_token",
-};
+const customOAuthPlugin =
+  process.env.CUSTOM_OAUTH_CLIENT_ID && process.env.CUSTOM_OAUTH_CLIENT_SECRET
+    ? genericOAuth({
+        config: (
+          [
+            process.env.CUSTOM_OAUTH_AUTHORIZATION_URL &&
+            process.env.CUSTOM_OAUTH_TOKEN_URL &&
+            process.env.CUSTOM_OAUTH_USERINFO_URL
+              ? {
+                  providerId: "oauth",
+                  clientId: process.env.CUSTOM_OAUTH_CLIENT_ID,
+                  clientSecret: process.env.CUSTOM_OAUTH_CLIENT_SECRET,
+                  authorizationUrl: process.env.CUSTOM_OAUTH_AUTHORIZATION_URL,
+                  tokenUrl: process.env.CUSTOM_OAUTH_TOKEN_URL,
+                  userInfoUrl: process.env.CUSTOM_OAUTH_USERINFO_URL,
+                  scopes: ["openid", "email", "profile"],
+                }
+              : process.env.CUSTOM_OAUTH_DISCOVERY_URL
+                ? {
+                    providerId: "oauth",
+                    clientId: process.env.CUSTOM_OAUTH_CLIENT_ID,
+                    clientSecret: process.env.CUSTOM_OAUTH_CLIENT_SECRET,
+                    discoveryUrl: process.env.CUSTOM_OAUTH_DISCOVERY_URL,
+                    scopes: ["openid", "email", "profile"],
+                  }
+                : null,
+          ] as const
+        ).filter((x) => x !== null),
+      })
+    : null;
 
-interface TokenInfo {
-  accessToken: string;
-  refreshToken?: string | null;
-  expiresAt?: Date | null;
-  username?: string | null;
-  providerUserId?: string | null;
-}
+export const auth = betterAuth({
+  database: prismaAdapter(prisma, { provider: "postgresql" }),
+  baseURL: APP_URL,
 
-export async function saveToken(
-  provider: Provider,
-  info: TokenInfo,
-): Promise<void> {
-  await prisma.authToken.upsert({
-    where: { provider },
-    create: {
-      provider,
-      accessToken: info.accessToken,
-      refreshToken: info.refreshToken ?? null,
-      expiresAt: info.expiresAt ?? null,
-      username: info.username ?? null,
-      providerUserId: info.providerUserId ?? null,
+  socialProviders: {
+    ...(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+      ? {
+          google: {
+            clientId: process.env.GOOGLE_CLIENT_ID,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          },
+        }
+      : {}),
+    ...(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET
+      ? {
+          discord: {
+            clientId: process.env.DISCORD_CLIENT_ID,
+            clientSecret: process.env.DISCORD_CLIENT_SECRET,
+          },
+        }
+      : {}),
+    ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
+      ? {
+          github: {
+            clientId: process.env.GITHUB_CLIENT_ID,
+            clientSecret: process.env.GITHUB_CLIENT_SECRET,
+          },
+        }
+      : {}),
+    ...(process.env.TWITTER_CLIENT_ID && process.env.TWITTER_CLIENT_SECRET
+      ? {
+          twitter: {
+            clientId: process.env.TWITTER_CLIENT_ID,
+            clientSecret: process.env.TWITTER_CLIENT_SECRET,
+          },
+        }
+      : {}),
+  },
+
+  plugins: [...(customOAuthPlugin ? [customOAuthPlugin] : [])],
+
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          const existingUser = await prisma.user.findFirst({
+            select: { id: true, email: true },
+          });
+
+          if (
+            existingUser &&
+            existingUser.email.toLowerCase() !== user.email.toLowerCase()
+          ) {
+            throw new Error(
+              "Access denied: this app instance only allows a single user identity.",
+            );
+          }
+
+          if (
+            AUTHORIZED_EMAIL &&
+            user.email.toLowerCase() !== AUTHORIZED_EMAIL.toLowerCase()
+          ) {
+            throw new Error(
+              `Access denied: ${user.email} is not authorized to use this app.`,
+            );
+          }
+          return { data: user };
+        },
+      },
     },
-    update: {
-      accessToken: info.accessToken,
-      refreshToken: info.refreshToken ?? undefined,
-      expiresAt: info.expiresAt ?? undefined,
-      username: info.username ?? undefined,
-      providerUserId: info.providerUserId ?? undefined,
-    },
-  });
-
-  const jar = await cookies();
-  jar.set(COOKIE_NAMES[provider], info.accessToken, COOKIE_OPTS);
-}
-
-export async function getToken(provider: Provider): Promise<TokenInfo | null> {
-  const jar = await cookies();
-  const cookie = jar.get(COOKIE_NAMES[provider]);
-  if (cookie?.value) {
-    const record = await prisma.authToken.findUnique({ where: { provider } });
-    return {
-      accessToken: cookie.value,
-      refreshToken: record?.refreshToken,
-      expiresAt: record?.expiresAt,
-      username: record?.username,
-      providerUserId: record?.providerUserId,
-    };
-  }
-
-  // Fall back to DB (e.g. after server restart)
-  const record = await prisma.authToken.findUnique({ where: { provider } });
-  if (!record) return null;
-
-  jar.set(COOKIE_NAMES[provider], record.accessToken, COOKIE_OPTS);
-
-  return {
-    accessToken: record.accessToken,
-    refreshToken: record.refreshToken,
-    expiresAt: record.expiresAt,
-    username: record.username,
-    providerUserId: record.providerUserId,
-  };
-}
-
-export async function deleteToken(provider: Provider): Promise<void> {
-  await prisma.authToken.deleteMany({ where: { provider } });
-  const jar = await cookies();
-  jar.delete(COOKIE_NAMES[provider]);
-}
-
-export async function getAuthStatus(): Promise<
-  Record<Provider, { loggedIn: boolean; username: string | null }>
-> {
-  const [kitsu, anilist] = await Promise.all([
-    prisma.authToken.findUnique({ where: { provider: "KITSU" } }),
-    prisma.authToken.findUnique({ where: { provider: "ANILIST" } }),
-  ]);
-  return {
-    KITSU: { loggedIn: !!kitsu, username: kitsu?.username ?? null },
-    ANILIST: { loggedIn: !!anilist, username: anilist?.username ?? null },
-  };
-}
+  },
+});

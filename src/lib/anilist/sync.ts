@@ -1,7 +1,7 @@
 import "server-only";
 import { ReadStatus, ShowStatus, WatchStatus } from "@/generated/prisma/client";
-import { getToken } from "@/lib/auth";
 import prisma from "@/lib/prisma";
+import { getToken } from "@/lib/provider-links";
 import {
   selectTitleFromAniList,
   validateAnimeListEntry,

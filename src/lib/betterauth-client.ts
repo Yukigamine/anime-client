@@ -6,5 +6,3 @@ export const authClient = createAuthClient({
   baseURL: getClientBaseUrl(),
   plugins: [genericOAuthClient()],
 });
-
-export type { Session } from "better-auth";

@@ -25,7 +25,8 @@ import {
   Typography,
 } from "@mui/material";
 import { enqueueSnackbar } from "notistack";
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
+import KitsuSyncButton from "@/components/KitsuSyncButton";
 import type { SyncLog } from "@/generated/prisma/client";
 import {
   deleteInvalidEntriesAction,
@@ -96,10 +97,36 @@ export default function SyncDashboard() {
     direction: "PULL" | "PUSH",
   ) {
     setRunning(`${provider}-${direction}`);
-    const result = await triggerSyncAction(provider, direction);
-    if (!result.ok) enqueueSnackbar(result.error, { variant: "error" });
-    setRunning(null);
-    await fetchStatus();
+    try {
+      const result = await triggerSyncAction(provider, direction);
+      if (!result.ok) {
+        enqueueSnackbar(result.error, { variant: "error" });
+        return;
+      }
+
+      const refreshed = await getSyncStatusAction();
+      setData(refreshed);
+
+      const completedLog = refreshed.logs.find(
+        (l) => l.id === result.data.logId,
+      );
+      const providerLabel = PROVIDER_LABELS[provider];
+      if (completedLog?.status === "COMPLETED") {
+        enqueueSnackbar(
+          `${providerLabel} ${direction.toLowerCase()} completed: synced ${completedLog.animeSynced} anime and ${completedLog.mangaSynced} manga (${completedLog.animeChanged} anime / ${completedLog.mangaChanged} manga changed)`,
+          { variant: "success" },
+        );
+      } else {
+        enqueueSnackbar(
+          `${providerLabel} ${direction.toLowerCase()} finished`,
+          {
+            variant: "success",
+          },
+        );
+      }
+    } finally {
+      setRunning(null);
+    }
   }
 
   const isRunning = (provider: string, direction: string) =>
@@ -208,92 +235,94 @@ export default function SyncDashboard() {
       </Box>
       <Stack spacing={3}>
         {(["KITSU", "ANILIST"] as const).map((provider) => (
-          <Paper key={provider} sx={{ p: 3 }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                {PROVIDER_LABELS[provider]}
-              </Typography>
-              {data?.auth[provider].loggedIn ? (
-                <Chip
-                  label={`@${data.auth[provider].username}`}
-                  color="success"
-                  size="small"
-                  variant="outlined"
-                />
-              ) : (
-                <Chip
-                  label="Not connected"
-                  color="warning"
-                  size="small"
-                  variant="outlined"
-                  component="a"
-                  href="/link"
-                  clickable
-                />
-              )}
-            </Box>
+          <ProviderCard
+            key={provider}
+            provider={provider}
+            auth={data?.auth[provider]}
+          >
+            {provider === "KITSU" ? (
+              <KitsuSyncButton
+                onSynced={fetchStatus}
+                renderAfterButton={(dir) => {
+                  const log = lastLog(provider, dir);
+                  if (!log) return null;
 
-            <Stack
-              direction="row"
-              spacing={2}
-              sx={{ flexWrap: "wrap", alignItems: "flex-start" }}
-            >
-              {(["PULL", "PUSH"] as const).map((dir) => {
-                const log = lastLog(provider, dir);
-                const busy = isRunning(provider, dir);
-                const isConnected = data?.auth[provider].loggedIn;
-                const disabled = busy || !isConnected;
-
-                const button = (
-                  <Button
-                    variant={dir === "PULL" ? "contained" : "outlined"}
-                    startIcon={
-                      busy ? (
-                        <CircularProgress size={16} color="inherit" />
-                      ) : dir === "PULL" ? (
-                        <CloudDownloadIcon />
-                      ) : (
-                        <CloudUploadIcon />
-                      )
-                    }
-                    disabled={disabled}
-                    onClick={() => triggerSync(provider, dir)}
-                    sx={{ textTransform: "none", mb: 1.5 }}
-                    fullWidth
-                  >
-                    {busy
-                      ? "Running…"
-                      : `${dir === "PULL" ? "Pull from" : "Push to"} ${PROVIDER_LABELS[provider]}`}
-                  </Button>
-                );
-
-                return (
-                  <Box key={dir} sx={{ flex: "1 1 240px", minWidth: 0 }}>
-                    <Tooltip
-                      title={
-                        disabled && !busy
-                          ? "Connect your account to enable this action"
-                          : ""
+                  return (
+                    <LastRunSummary
+                      log={log}
+                      expanded={expandedLog === log.id}
+                      onToggle={() =>
+                        setExpandedLog(expandedLog === log.id ? null : log.id)
                       }
-                      disableInteractive
-                    >
-                      <span>{button}</span>
-                    </Tooltip>
+                    />
+                  );
+                }}
+              />
+            ) : (
+              <Stack
+                direction="row"
+                spacing={2}
+                sx={{ flexWrap: "wrap", alignItems: "flex-start" }}
+              >
+                {(["PULL", "PUSH"] as const).map((dir) => {
+                  const log = lastLog(provider, dir);
+                  const busy = isRunning(provider, dir);
+                  const isConnected = data?.auth[provider].loggedIn;
+                  const disabled = busy || !isConnected;
 
-                    {log && (
-                      <LastRunSummary
-                        log={log}
-                        expanded={expandedLog === log.id}
-                        onToggle={() =>
-                          setExpandedLog(expandedLog === log.id ? null : log.id)
+                  const button = (
+                    <Button
+                      variant={dir === "PULL" ? "contained" : "outlined"}
+                      startIcon={
+                        busy ? (
+                          <CircularProgress size={16} color="inherit" />
+                        ) : dir === "PULL" ? (
+                          <CloudDownloadIcon />
+                        ) : (
+                          <CloudUploadIcon />
+                        )
+                      }
+                      disabled={disabled}
+                      onClick={() => triggerSync(provider, dir)}
+                      sx={{ textTransform: "none", mb: 1.5 }}
+                      fullWidth
+                    >
+                      {busy
+                        ? "Running…"
+                        : `${dir === "PULL" ? "Pull from" : "Push to"} ${PROVIDER_LABELS[provider]}`}
+                    </Button>
+                  );
+
+                  return (
+                    <Box key={dir} sx={{ flex: "1 1 240px", minWidth: 0 }}>
+                      <Tooltip
+                        title={
+                          disabled && !busy
+                            ? "Connect your account to enable this action"
+                            : ""
                         }
-                      />
-                    )}
-                  </Box>
-                );
-              })}
-            </Stack>
-          </Paper>
+                        disableInteractive
+                      >
+                        <span>{button}</span>
+                      </Tooltip>
+
+                      {log && (
+                        <LastRunSummary
+                          log={log}
+                          expanded={expandedLog === log.id}
+                          onToggle={() =>
+                            setExpandedLog(
+                              expandedLog === log.id ? null : log.id,
+                            )
+                          }
+                        />
+                      )}
+                    </Box>
+                  );
+                })}
+              </Stack>
+            )}
+          </ProviderCard>
         ))}
       </Stack>
 
@@ -458,6 +487,45 @@ export default function SyncDashboard() {
         </DialogActions>
       </Dialog>
     </Box>
+  );
+}
+
+function ProviderCard({
+  provider,
+  auth,
+  children,
+}: {
+  provider: "KITSU" | "ANILIST";
+  auth?: SyncStatusPayload["auth"]["KITSU"];
+  children: ReactNode;
+}) {
+  return (
+    <Paper sx={{ p: 3 }}>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+          {PROVIDER_LABELS[provider]}
+        </Typography>
+        {auth?.loggedIn ? (
+          <Chip
+            label={`@${auth.username}`}
+            color="success"
+            size="small"
+            variant="outlined"
+          />
+        ) : (
+          <Chip
+            label="Not connected"
+            color="warning"
+            size="small"
+            variant="outlined"
+            component="a"
+            href="/link"
+            clickable
+          />
+        )}
+      </Box>
+      {children}
+    </Paper>
   );
 }
 
