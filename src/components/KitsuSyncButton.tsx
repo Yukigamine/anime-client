@@ -505,6 +505,13 @@ async function runMutationBatches<
   }
 }
 
+function trimSyncEntryDescription(
+  entry: KitsuLibrarySyncPayload["anime"][number],
+) {
+  const { description: _description, ...media } = entry.media;
+  return { ...entry, media };
+}
+
 export default function KitsuSyncButton({
   onSynced,
   renderAfterButton,
@@ -546,7 +553,11 @@ export default function KitsuSyncButton({
         fetchLibraryPages(slug, MediaTypeEnum.MANGA, accessToken),
       ]);
 
-      const payload: KitsuLibrarySyncPayload = { slug, anime, manga };
+      const payload: KitsuLibrarySyncPayload = {
+        slug,
+        anime: anime.map(trimSyncEntryDescription),
+        manga: manga.map(trimSyncEntryDescription),
+      };
       const result = await syncKitsuLibraryAction(payload);
 
       if (!result.ok) {

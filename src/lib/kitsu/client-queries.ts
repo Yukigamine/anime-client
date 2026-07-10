@@ -92,13 +92,15 @@ export async function searchAnimeByTitleClient(
     ],
   });
 
-  return (result.searchAnimeByTitle?.nodes ?? []).filter(Boolean).map((n) => ({
-    kitsuId: n?.slug,
-    rawId: String(n?.id),
-    titleEn: n?.titles?.canonical ?? n?.slug,
-    titleRomaji: n?.titles?.romanized ?? null,
-    posterUrl: n?.posterImage?.original?.url ?? null,
-  }));
+  return (result.searchAnimeByTitle?.nodes ?? [])
+    .filter((n) => !!n?.id)
+    .map((n) => ({
+      kitsuId: String(n?.id),
+      rawId: String(n?.id),
+      titleEn: n?.titles?.canonical ?? n?.slug ?? String(n?.id),
+      titleRomaji: n?.titles?.romanized ?? null,
+      posterUrl: n?.posterImage?.original?.url ?? null,
+    }));
 }
 
 export async function searchMangaByTitleClient(
@@ -118,13 +120,15 @@ export async function searchMangaByTitleClient(
     ],
   });
 
-  return (result.searchMangaByTitle?.nodes ?? []).filter(Boolean).map((n) => ({
-    kitsuId: n?.slug,
-    rawId: String(n?.id),
-    titleEn: n?.titles?.canonical ?? n?.slug,
-    titleRomaji: n?.titles?.romanized ?? null,
-    posterUrl: n?.posterImage?.original?.url ?? null,
-  }));
+  return (result.searchMangaByTitle?.nodes ?? [])
+    .filter((n) => !!n?.id)
+    .map((n) => ({
+      kitsuId: String(n?.id),
+      rawId: String(n?.id),
+      titleEn: n?.titles?.canonical ?? n?.slug ?? String(n?.id),
+      titleRomaji: n?.titles?.romanized ?? null,
+      posterUrl: n?.posterImage?.original?.url ?? null,
+    }));
 }
 
 export async function getAnimeResolvePayloadBySlug(

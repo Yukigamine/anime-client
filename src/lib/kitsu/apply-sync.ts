@@ -265,9 +265,14 @@ function extractExternalIds(entry: KitsuLibraryEntry["media"]): {
   const mal = mappingNodes.find((mapping) =>
     mapping.externalSite.includes("MYANIMELIST"),
   );
+  const parseExternalId = (value: string): number | null => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
   return {
-    anilistId: anilist ? Number(anilist.externalId) : null,
-    malId: mal ? Number(mal.externalId) : null,
+    anilistId: anilist ? parseExternalId(anilist.externalId) : null,
+    malId: mal ? parseExternalId(mal.externalId) : null,
   };
 }
 

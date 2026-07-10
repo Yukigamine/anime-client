@@ -59,9 +59,9 @@ export async function saveToken(
         accountId:
           info.username ?? info.providerUserId ?? provider.toLowerCase(),
         accessToken: info.accessToken,
-        refreshToken: info.refreshToken ?? undefined,
-        accessTokenExpiresAt: info.expiresAt ?? undefined,
-        idToken: info.avatarUrl ?? undefined,
+        refreshToken: info.refreshToken,
+        accessTokenExpiresAt: info.expiresAt,
+        idToken: info.avatarUrl,
       },
     });
     return;
