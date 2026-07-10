@@ -10,40 +10,23 @@ import {
   resolveAnimeId as resolveAnimeIdImpl,
   resolveMangaId as resolveMangaIdImpl,
 } from "./collection/crud";
-import { fetchMangaSeriesDetail as fetchMangaSeriesDetailImpl } from "./collection/details";
-import {
-  searchAnimeByTitle as searchAnimeByTitleImpl,
-  searchMangaByTitle as searchMangaByTitleImpl,
-} from "./collection/search";
 import type {
   ActionResult,
   AnimeCollectionItemInput,
+  AnimeResolvePayload,
   KitsuSearchResult,
   MangaCollectionItemInput,
+  MangaResolvePayload,
 } from "./collection/types";
 
 export type {
   ActionResult,
   AnimeCollectionItemInput,
+  AnimeResolvePayload,
   KitsuSearchResult,
   MangaCollectionItemInput,
+  MangaResolvePayload,
 };
-
-export async function searchAnimeByTitle(
-  query: string,
-): Promise<ActionResult<KitsuSearchResult[]>> {
-  return searchAnimeByTitleImpl(query);
-}
-
-export async function searchMangaByTitle(
-  query: string,
-): Promise<ActionResult<KitsuSearchResult[]>> {
-  return searchMangaByTitleImpl(query);
-}
-
-export async function fetchMangaSeriesDetail(kitsuId: string) {
-  return fetchMangaSeriesDetailImpl(kitsuId);
-}
 
 export async function addAnimeCollectionItem(
   input: AnimeCollectionItemInput,
@@ -86,13 +69,13 @@ export async function deleteMangaCollectionItem(
 }
 
 export async function resolveAnimeId(
-  kitsuId: string,
+  payload: AnimeResolvePayload,
 ): Promise<ActionResult<string>> {
-  return resolveAnimeIdImpl(kitsuId);
+  return resolveAnimeIdImpl(payload);
 }
 
 export async function resolveMangaId(
-  kitsuId: string,
+  payload: MangaResolvePayload,
 ): Promise<ActionResult<string>> {
-  return resolveMangaIdImpl(kitsuId);
+  return resolveMangaIdImpl(payload);
 }

@@ -1,3 +1,4 @@
+
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -80,21 +81,6 @@ enum MangaLanguage {
   OTHER
 }
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
-
-model AuthToken {
-  id             String    @id @default(cuid())
-  provider       Provider  @unique
-  accessToken    String
-  refreshToken   String?
-  expiresAt      DateTime?
-  providerUserId String?
-  username       String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 // BetterAuth session management tables
 
 model User {
@@ -155,32 +141,33 @@ model Verification {
   updatedAt  DateTime?
 
   @@map("verification")
+  @@index([identifier])
 }
 
 // ─── Sync Logs ────────────────────────────────────────────────────────────────
 
 model SyncLog {
-  id            String        @id @default(cuid())
-  provider      Provider
-  direction     SyncDirection
-  status        SyncStatus    @default(RUNNING)
-  animeSynced   Int           @default(0)
-  mangaSynced   Int           @default(0)
-  animeChanged  Int           @default(0)
-  mangaChanged  Int           @default(0)
-  errors        Json          @default("[]")
-  deletions     Json          @default("[]")
-  startedAt     DateTime      @default(now())
-  finishedAt    DateTime?
+  id           String        @id @default(cuid())
+  provider     Provider
+  direction    SyncDirection
+  status       SyncStatus    @default(RUNNING)
+  animeSynced  Int           @default(0)
+  mangaSynced  Int           @default(0)
+  animeChanged Int           @default(0)
+  mangaChanged Int           @default(0)
+  errors       Json          @default("[]")
+  deletions    Json          @default("[]")
+  startedAt    DateTime      @default(now())
+  finishedAt   DateTime?
 }
 
 // ─── Anime ────────────────────────────────────────────────────────────────────
 
 model Anime {
-  id             String     @id @default(cuid())
-  kitsuId        String?    @unique
-  anilistId      Int?       @unique
-  malId          Int?       @unique
+  id        String  @id @default(cuid())
+  kitsuId   String? @unique
+  anilistId Int?    @unique
+  malId     Int?    @unique
 
   titleEn        String?
   titleJp        String?
@@ -244,22 +231,22 @@ model AnimeCollectionItem {
 // ─── Manga ────────────────────────────────────────────────────────────────────
 
 model Manga {
-  id             String     @id @default(cuid())
-  kitsuId        String?    @unique
-  anilistId      Int?       @unique
-  malId          Int?       @unique
+  id        String  @id @default(cuid())
+  kitsuId   String? @unique
+  anilistId Int?    @unique
+  malId     Int?    @unique
 
-  titleEn        String?
-  titleJp        String?
-  titleRomaji    String?
-  synopsis       String?
-  coverImageUrl  String?
-  chapterCount   Int?
-  volumeCount    Int?
-  showStatus     ShowStatus @default(UNKNOWN)
-  averageRating  Float?
-  startDate      DateTime?
-  endDate        DateTime?
+  titleEn       String?
+  titleJp       String?
+  titleRomaji   String?
+  synopsis      String?
+  coverImageUrl String?
+  chapterCount  Int?
+  volumeCount   Int?
+  showStatus    ShowStatus @default(UNKNOWN)
+  averageRating Float?
+  startDate     DateTime?
+  endDate       DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -297,13 +284,13 @@ model MangaCollectionItem {
   mangaId String
   manga   Manga  @relation(fields: [mangaId], references: [id], onDelete: Cascade)
 
-  condition           CollectionCondition @default(GOOD)
-  language            MangaLanguage       @default(ENGLISH)
-  notes               String?
-  containsSerialized  Boolean             @default(false)
-  containsOmnibus     Boolean             @default(false)
-  volumes             Int[]
-  chapters            Int[]
+  condition          CollectionCondition @default(GOOD)
+  language           MangaLanguage       @default(ENGLISH)
+  notes              String?
+  containsSerialized Boolean             @default(false)
+  containsOmnibus    Boolean             @default(false)
+  volumes            Int[]
+  chapters           Int[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -1,9 +1,8 @@
 "use server";
 
 import type { SyncLog } from "@/generated/prisma/client";
-import { getAuthStatus } from "@/lib/auth";
-import { ensureValidKitsuToken } from "@/lib/kitsu/auth";
 import prisma from "@/lib/prisma";
+import { getAuthStatus } from "@/lib/provider-links";
 import { invalidateListCache } from "@/lib/redis";
 import { requireSession } from "@/lib/session";
 import {
@@ -39,9 +38,11 @@ export async function triggerSyncAction(
 ): Promise<ActionResult<{ logId: string }>> {
   await requireSession();
 
-  if (provider === "KITSU") {
-    const token = await ensureValidKitsuToken();
-    if (!token) return { ok: false, error: "Not logged in to Kitsu" };
+  if (provider !== "ANILIST") {
+    return {
+      ok: false,
+      error: "Kitsu sync now runs in the browser. Use the Kitsu sync button.",
+    };
   }
 
   await prisma.syncLog.updateMany({
@@ -54,15 +55,10 @@ export async function triggerSyncAction(
   });
 
   try {
-    if (provider === "KITSU") {
-      const { pullKitsu, pushKitsu } = await import("@/lib/kitsu/sync");
-      direction === "PULL" ? await pullKitsu(log.id) : await pushKitsu(log.id);
-    } else {
-      const { pullAniList, pushAniList } = await import("@/lib/anilist/sync");
-      direction === "PULL"
-        ? await pullAniList(log.id)
-        : await pushAniList(log.id);
-    }
+    const { pullAniList, pushAniList } = await import("@/lib/anilist/sync");
+    direction === "PULL"
+      ? await pullAniList(log.id)
+      : await pushAniList(log.id);
     await invalidateListCache();
     return { ok: true, data: { logId: log.id } };
   } catch (err) {

@@ -18,7 +18,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ItemLookupField } from "@/components/ItemLookupField";
 import type {
   CollectionCondition,
@@ -32,10 +32,13 @@ import type {
 import {
   addMangaCollectionItem,
   editMangaCollectionItem,
-  fetchMangaSeriesDetail,
   resolveMangaId,
 } from "@/lib/actions/collection";
-import type { MangaSeriesDetail } from "@/lib/kitsu/cache";
+import {
+  getMangaResolvePayloadBySlug,
+  getMangaSeriesDetailBySlug,
+  type KitsuMangaSeriesDetail,
+} from "@/lib/kitsu/client-queries";
 
 type ExistingItem = {
   id: string;
@@ -55,7 +58,7 @@ type Props = {
   /** Present on edit; absent on add */
   initialData?: ExistingItem;
   /** Kitsu series detail for volume/chapter totals (may be null) */
-  seriesDetail?: MangaSeriesDetail | null;
+  seriesDetail?: KitsuMangaSeriesDetail | null;
 };
 
 const CONDITION_OPTIONS: { value: CollectionCondition; label: string }[] = [
@@ -194,6 +197,30 @@ export function MangaCollectionItemForm({
     typeof initialSeriesDetail | null
   >(initialSeriesDetail ?? null);
 
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      if (!initialData?.kitsuId) return;
+      const detail = await getMangaSeriesDetailBySlug(initialData.kitsuId);
+      if (!active) return;
+      setFetchedSeriesDetail(detail);
+      if (detail && detail.totalVolumes !== null) {
+        setCustomTotalVolumes(String(detail.totalVolumes));
+      }
+      if (detail && detail.totalChapters !== null) {
+        setCustomTotalChapters(String(detail.totalChapters));
+      }
+    }
+
+    if (isEdit && initialData?.kitsuId) {
+      void load();
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [initialData?.kitsuId, isEdit]);
+
   // Use fetched detail when available, otherwise fall back to initial
   const seriesDetail = fetchedSeriesDetail || initialSeriesDetail;
 
@@ -201,16 +228,13 @@ export function MangaCollectionItemForm({
     setSelectedManga(manga);
     // Fetch series detail when a new title is selected (add mode)
     if (!isEdit && manga) {
-      const result = await fetchMangaSeriesDetail(manga.kitsuId);
-      if (result.ok) {
-        setFetchedSeriesDetail(result.data);
-        // Auto-populate totals from Kitsu
-        if (result.data.totalVolumes !== null) {
-          setCustomTotalVolumes(String(result.data.totalVolumes));
-        }
-        if (result.data.totalChapters !== null) {
-          setCustomTotalChapters(String(result.data.totalChapters));
-        }
+      const detail = await getMangaSeriesDetailBySlug(manga.kitsuId);
+      setFetchedSeriesDetail(detail);
+      if (detail && detail.totalVolumes !== null) {
+        setCustomTotalVolumes(String(detail.totalVolumes));
+      }
+      if (detail && detail.totalChapters !== null) {
+        setCustomTotalChapters(String(detail.totalChapters));
       }
     }
   };
@@ -297,7 +321,16 @@ export function MangaCollectionItemForm({
           setSubmitting(false);
           return;
         }
-        const resolved = await resolveMangaId(selectedManga.kitsuId);
+        const payload = await getMangaResolvePayloadBySlug(
+          selectedManga.kitsuId,
+        );
+        if (!payload) {
+          setError("Manga not found on Kitsu.");
+          setSubmitting(false);
+          return;
+        }
+
+        const resolved = await resolveMangaId(payload);
         if (!resolved.ok) {
           setError(resolved.error);
           setSubmitting(false);

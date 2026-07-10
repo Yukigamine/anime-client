@@ -1,6 +1,6 @@
 import "server-only";
 import { headers } from "next/headers";
-import { auth } from "@/lib/betterauth";
+import { auth } from "@/lib/auth";
 
 /**
  * Returns the current session (or null) from server components / server actions.

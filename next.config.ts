@@ -13,13 +13,6 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   turbopack: {},
   reactStrictMode: true,
-  serverExternalPackages: [
-    "@sparticuz/chromium-min",
-    "puppeteer",
-    "puppeteer-core",
-    "puppeteer-extra",
-    "puppeteer-extra-plugin-stealth",
-  ],
   trailingSlash: false,
   images: {
     remotePatterns: [

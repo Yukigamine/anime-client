@@ -1,10 +1,11 @@
 import { Thunder } from "@/lib/zeus/kitsu";
+import { assertNoCloudflareChallenge, kitsuFetch } from "./fetch";
 
 const KITSU_GRAPHQL =
   process.env.NEXT_PUBLIC_KITSU_API_URL ?? "https://kitsu.app/api/graphql";
 
 export const kitsuClient = Thunder(async (query, variables) => {
-  const headers = {
+  const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "application/json",
     Referer: "https://kitsu.app",
@@ -26,46 +27,30 @@ export const kitsuClient = Thunder(async (query, variables) => {
     Connection: "keep-alive",
   };
 
-  console.log(`[Kitsu] POST ${KITSU_GRAPHQL}`, { headers });
-
-  const res = await fetch(KITSU_GRAPHQL, {
+  const result = await kitsuFetch(KITSU_GRAPHQL, {
     method: "POST",
     headers,
     body: JSON.stringify({ query, variables }),
   });
 
-  const cfMitigated = res.headers.get("cf-mitigated");
-  const cacheStatus = res.headers.get("cf-cache-status");
-  const cfRay = res.headers.get("cf-ray");
-  console.log(`[Kitsu Response] ${res.status}`, {
-    cfMitigated,
-    cacheStatus,
-    cfRay,
-    contentType: res.headers.get("content-type"),
-  });
+  assertNoCloudflareChallenge(result);
 
-  if (cfMitigated === "challenge") {
-    throw new Error(
-      "Cloudflare challenge detected — Kitsu API is blocking requests",
-    );
-  }
-
-  if (!res.ok) {
-    const text = await res.text();
-    const preview = text.substring(0, 500);
-    const isHtml = text.includes("<!DOCTYPE") || text.includes("<html");
+  if (result.status < 200 || result.status >= 300) {
+    const preview = result.body.substring(0, 500);
+    const body = result.body;
+    const isHtml = body.includes("<!DOCTYPE") || body.includes("<html");
     const isCloudflareChallenge =
-      text.includes("Cloudflare") || text.includes("cf_clearance");
-    console.error(`[Kitsu Error] ${res.status}`, {
+      body.includes("Cloudflare") || body.includes("cf_clearance");
+    console.error(`[Kitsu Error] ${result.status}`, {
       isHtmlResponse: isHtml,
       isCloudflareChallenge,
-      cfRay,
+      cfRay: result.headers["cf-ray"] ?? null,
       responsePreview: preview,
     });
-    throw new Error(`Kitsu GraphQL ${res.status}`);
+    throw new Error(`Kitsu GraphQL ${result.status}`);
   }
 
-  const body = (await res.json()) as {
+  const body = JSON.parse(result.body) as {
     data?: unknown;
     errors?: { message: string }[];
   };

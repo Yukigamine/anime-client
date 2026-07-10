@@ -63,8 +63,34 @@ export default function UserProfileContent({ username }: { username: string }) {
     }
   }, [error]);
 
-  if (error || isLoading || !profile) {
+  if (isLoading) {
     return <ProfileSkeleton />;
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="sm" sx={{ py: 8 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
+          Unable to load profile
+        </Typography>
+        <Typography color="text.secondary">
+          We could not load this Kitsu profile right now.
+        </Typography>
+      </Container>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <Container maxWidth="sm" sx={{ py: 8 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
+          Profile not found
+        </Typography>
+        <Typography color="text.secondary">
+          The requested Kitsu user could not be found.
+        </Typography>
+      </Container>
+    );
   }
 
   const joinFormatted = `${formatProfileDate(profile.createdAt)} (${daysAgo(profile.createdAt).toLocaleString()} days ago)`;
@@ -190,6 +216,20 @@ export default function UserProfileContent({ username }: { username: string }) {
                   )}
                   {profile.location && (
                     <DetailRow label="Location">{profile.location}</DetailRow>
+                  )}
+                  {profile.website && (
+                    <DetailRow label="Website">
+                      <Link
+                        href={profile.website}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        underline="hover"
+                        variant="body2"
+                        sx={{ wordBreak: "break-all" }}
+                      >
+                        {profile.website}
+                      </Link>
+                    </DetailRow>
                   )}
                   {profile.waifu && (
                     <DetailRow label={profile.waifu.label}>

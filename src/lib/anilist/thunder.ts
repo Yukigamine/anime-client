@@ -1,5 +1,5 @@
 import "server-only";
-import { getToken } from "@/lib/auth";
+import { getToken } from "@/lib/provider-links";
 import { Thunder } from "@/lib/zeus/anilist";
 
 const ANILIST_GRAPHQL =

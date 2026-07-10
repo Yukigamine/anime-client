@@ -14,7 +14,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ItemLookupField } from "@/components/ItemLookupField";
 import type {
   CollectionCondition,
@@ -30,7 +30,11 @@ import {
   editAnimeCollectionItem,
   resolveAnimeId,
 } from "@/lib/actions/collection";
-import type { AnimeSeriesDetail } from "@/lib/kitsu/cache";
+import {
+  getAnimeResolvePayloadBySlug,
+  getAnimeSeriesDetailBySlug,
+  type KitsuAnimeSeriesDetail,
+} from "@/lib/kitsu/client-queries";
 
 type ExistingItem = {
   id: string;
@@ -50,7 +54,7 @@ type Props = {
   /** Present on edit; absent on add */
   initialData?: ExistingItem;
   /** Kitsu series detail (edit mode only) */
-  seriesDetail?: AnimeSeriesDetail | null;
+  seriesDetail?: KitsuAnimeSeriesDetail | null;
 };
 
 const FORMAT_OPTIONS: { value: MediaFormat; label: string }[] = [
@@ -79,6 +83,30 @@ const RARITY_OPTIONS: { value: CollectionRarity; label: string }[] = [
 export function AnimeCollectionItemForm({ initialData, seriesDetail }: Props) {
   const router = useRouter();
   const isEdit = Boolean(initialData);
+
+  const [fetchedSeriesDetail, setFetchedSeriesDetail] =
+    useState<KitsuAnimeSeriesDetail | null>(seriesDetail ?? null);
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      if (!initialData?.kitsuId) return;
+      const detail = await getAnimeSeriesDetailBySlug(initialData.kitsuId);
+      if (active) {
+        setFetchedSeriesDetail(detail);
+      }
+    }
+
+    if (isEdit && initialData?.kitsuId) {
+      void load();
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [initialData?.kitsuId, isEdit]);
+
+  const activeSeriesDetail = fetchedSeriesDetail ?? seriesDetail ?? null;
 
   const [selectedAnime, setSelectedAnime] = useState<KitsuSearchResult | null>(
     initialData?.kitsuId
@@ -135,7 +163,16 @@ export function AnimeCollectionItemForm({ initialData, seriesDetail }: Props) {
           setSubmitting(false);
           return;
         }
-        const resolved = await resolveAnimeId(selectedAnime.kitsuId);
+        const payload = await getAnimeResolvePayloadBySlug(
+          selectedAnime.kitsuId,
+        );
+        if (!payload) {
+          setError("Anime not found on Kitsu.");
+          setSubmitting(false);
+          return;
+        }
+
+        const resolved = await resolveAnimeId(payload);
         if (!resolved.ok) {
           setError(resolved.error);
           setSubmitting(false);
@@ -191,10 +228,10 @@ export function AnimeCollectionItemForm({ initialData, seriesDetail }: Props) {
           disabled={isEdit}
           initialValue={selectedAnime}
         />
-        {isEdit && seriesDetail?.episodeCount != null && (
+        {isEdit && activeSeriesDetail?.episodeCount != null && (
           <Typography variant="body2" color="text.secondary">
-            {seriesDetail.episodeCount} episode
-            {seriesDetail.episodeCount !== 1 ? "s" : ""} (Kitsu)
+            {activeSeriesDetail.episodeCount} episode
+            {activeSeriesDetail.episodeCount !== 1 ? "s" : ""} (Kitsu)
           </Typography>
         )}
 

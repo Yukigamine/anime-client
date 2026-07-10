@@ -1,5 +1,5 @@
 import "server-only";
-import { saveToken } from "@/lib/auth";
+import { saveToken } from "@/lib/provider-links";
 
 const ANILIST_TOKEN_URL = "https://anilist.co/api/v2/oauth/token";
 const ANILIST_AUTH_URL = "https://anilist.co/api/v2/oauth/authorize";
@@ -21,7 +21,10 @@ export function buildAniListAuthUrl(): string {
   return `${ANILIST_AUTH_URL}?${params.toString()}`;
 }
 
-export async function exchangeAniListCode(code: string): Promise<string> {
+export async function exchangeAniListCode(
+  code: string,
+  options?: { userId?: string },
+): Promise<string> {
   const clientId = process.env.ANILIST_CLIENT_ID ?? "";
   const clientSecret = process.env.ANILIST_CLIENT_SECRET ?? "";
   const redirectUri =
@@ -67,14 +70,20 @@ export async function exchangeAniListCode(code: string): Promise<string> {
       "Content-Type": "application/json",
       Authorization: `Bearer ${data.access_token}`,
     },
-    body: JSON.stringify({ query: "{ Viewer { id name } }" }),
+    body: JSON.stringify({ query: "{ Viewer { id name avatar { large } } }" }),
   });
 
-  let viewer: { data: { Viewer: { id: number; name: string } } } | null = null;
+  let viewer: {
+    data: {
+      Viewer: { id: number; name: string; avatar?: { large?: string } };
+    };
+  } | null = null;
   if (viewerRes.ok) {
     try {
       viewer = (await viewerRes.json()) as {
-        data: { Viewer: { id: number; name: string } };
+        data: {
+          Viewer: { id: number; name: string; avatar?: { large?: string } };
+        };
       };
     } catch {
       console.error("Failed to parse AniList viewer response");
@@ -85,13 +94,18 @@ export async function exchangeAniListCode(code: string): Promise<string> {
 
   const expiresAt = new Date(Date.now() + data.expires_in * 1000);
 
-  await saveToken("ANILIST", {
-    accessToken: data.access_token,
-    refreshToken: null,
-    expiresAt,
-    providerUserId: viewer?.data?.Viewer?.id?.toString() ?? null,
-    username: viewer?.data?.Viewer?.name ?? null,
-  });
+  await saveToken(
+    "ANILIST",
+    {
+      accessToken: data.access_token,
+      refreshToken: null,
+      expiresAt,
+      providerUserId: viewer?.data?.Viewer?.id?.toString() ?? null,
+      username: viewer?.data?.Viewer?.name ?? null,
+      avatarUrl: viewer?.data?.Viewer?.avatar?.large ?? null,
+    },
+    { userId: options?.userId },
+  );
 
   return data.access_token;
 }
