@@ -24,16 +24,16 @@ import type {
   CollectionCondition,
   MangaLanguage,
 } from "@/generated/prisma/enums";
-import type {
-  ActionResult,
-  KitsuSearchResult,
-  MangaCollectionItemInput,
-} from "@/lib/actions/collection";
 import {
   addMangaCollectionItem,
   editMangaCollectionItem,
   resolveMangaId,
 } from "@/lib/actions/collection";
+import type {
+  ActionResult,
+  KitsuSearchResult,
+  MangaCollectionItemInput,
+} from "@/lib/actions/collection/types";
 import {
   getMangaResolvePayloadBySlug,
   getMangaSeriesDetailBySlug,

@@ -1,15 +1,18 @@
 "use client";
 
+import EditIcon from "@mui/icons-material/Edit";
 import {
   Box,
   Card,
   CardContent,
   Chip,
+  IconButton,
   Rating,
   Tooltip,
   Typography,
 } from "@mui/material";
 import Image from "next/image";
+import AppLink from "@/components/Link";
 import type { MangaListEntry } from "@/generated/prisma/client";
 import type { MangaWithEntry } from "@/lib/list";
 
@@ -23,16 +26,23 @@ const STATUS_COLORS = {
 
 const STATUS_LABELS: Record<MangaListEntry["readStatus"], string> = {
   READING: "Reading",
-  PLAN_TO_READ: "Plan to Read",
+  PLAN_TO_READ: "Want to Read",
   COMPLETED: "Completed",
   ON_HOLD: "On Hold",
   DROPPED: "Dropped",
 };
 
-export default function MangaCard({ item }: { item: MangaWithEntry }) {
+export default function MangaCard({
+  item,
+  detailHref,
+  onEdit,
+}: {
+  item: MangaWithEntry;
+  detailHref: string;
+  onEdit: (item: MangaWithEntry) => void;
+}) {
   const entry = item.listEntry;
   const title = item.titleEn ?? item.titleRomaji ?? item.titleJp ?? "Unknown";
-
   const chapterProgress =
     item.chapterCount != null
       ? `${entry?.progress ?? 0} / ${item.chapterCount} ch`
@@ -51,12 +61,20 @@ export default function MangaCard({ item }: { item: MangaWithEntry }) {
         display: "flex",
         height: 140,
         overflow: "hidden",
+        position: "relative",
         transition: "transform 0.15s, box-shadow 0.15s",
         "&:hover": { transform: "translateY(-2px)", boxShadow: 6 },
+        "&:hover .edit-action, &:focus-within .edit-action": {
+          opacity: 1,
+          pointerEvents: "auto",
+        },
       }}
     >
-      <Box
+      <AppLink
+        href={detailHref}
+        aria-label={`View ${title}`}
         sx={{
+          display: "block",
           position: "relative",
           width: 93,
           flexShrink: 0,
@@ -89,7 +107,28 @@ export default function MangaCard({ item }: { item: MangaWithEntry }) {
             No image
           </Box>
         )}
-      </Box>
+      </AppLink>
+
+      <Tooltip title={`Edit ${title}`}>
+        <IconButton
+          className="edit-action"
+          size="small"
+          onClick={() => onEdit(item)}
+          sx={{
+            position: "absolute",
+            bottom: 4,
+            right: 4,
+            bgcolor: "background.paper",
+            zIndex: 1,
+            opacity: 0,
+            pointerEvents: "none",
+            transition: "opacity 0.15s ease",
+          }}
+          aria-label={`Edit ${title}`}
+        >
+          <EditIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
 
       <CardContent
         sx={{
@@ -104,13 +143,18 @@ export default function MangaCard({ item }: { item: MangaWithEntry }) {
         }}
       >
         <Tooltip title={title} placement="top-start">
-          <Typography
-            variant="subtitle1"
-            noWrap
-            sx={{ fontWeight: 600, lineHeight: 1.3 }}
+          <AppLink
+            href={detailHref}
+            sx={{ color: "inherit", textDecoration: "none" }}
           >
-            {title}
-          </Typography>
+            <Typography
+              variant="subtitle1"
+              noWrap
+              sx={{ fontWeight: 600, lineHeight: 1.3 }}
+            >
+              {title}
+            </Typography>
+          </AppLink>
         </Tooltip>
 
         {item.titleJp && item.titleJp !== title && (

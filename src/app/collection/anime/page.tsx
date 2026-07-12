@@ -7,7 +7,7 @@ import AppLink from "@/components/Link";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Anime Collection – Anime Client" };
+export const metadata: Metadata = { title: "Anime Collection – Tsuki Client" };
 export const dynamic = "force-dynamic";
 
 const _FORMAT_LABELS: Record<string, string> = {

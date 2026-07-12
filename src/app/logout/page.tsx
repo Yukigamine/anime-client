@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import LogoutForm from "@/components/LogoutForm";
 import { getSession } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Log out – Anime Client" };
+export const metadata: Metadata = { title: "Log out – Tsuki Client" };
 
 export default async function LogoutPage() {
   const result = await getSession();

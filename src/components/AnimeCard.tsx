@@ -1,15 +1,18 @@
 "use client";
 
+import EditIcon from "@mui/icons-material/Edit";
 import {
   Box,
   Card,
   CardContent,
   Chip,
+  IconButton,
   Rating,
   Tooltip,
   Typography,
 } from "@mui/material";
 import Image from "next/image";
+import AppLink from "@/components/Link";
 import type { AnimeListEntry } from "@/generated/prisma/client";
 import type { AnimeWithEntry } from "@/lib/list";
 
@@ -29,7 +32,15 @@ const STATUS_LABELS: Record<AnimeListEntry["watchStatus"], string> = {
   DROPPED: "Dropped",
 };
 
-export default function AnimeCard({ item }: { item: AnimeWithEntry }) {
+export default function AnimeCard({
+  item,
+  detailHref,
+  onEdit,
+}: {
+  item: AnimeWithEntry;
+  detailHref: string;
+  onEdit: (item: AnimeWithEntry) => void;
+}) {
   const entry = item.listEntry;
   const title = item.titleEn ?? item.titleRomaji ?? item.titleJp ?? "Unknown";
   const progress =
@@ -43,12 +54,20 @@ export default function AnimeCard({ item }: { item: AnimeWithEntry }) {
         display: "flex",
         height: 140,
         overflow: "hidden",
+        position: "relative",
         transition: "transform 0.15s, box-shadow 0.15s",
         "&:hover": { transform: "translateY(-2px)", boxShadow: 6 },
+        "&:hover .edit-action, &:focus-within .edit-action": {
+          opacity: 1,
+          pointerEvents: "auto",
+        },
       }}
     >
-      <Box
+      <AppLink
+        href={detailHref}
+        aria-label={`View ${title}`}
         sx={{
+          display: "block",
           position: "relative",
           width: 93,
           flexShrink: 0,
@@ -81,7 +100,28 @@ export default function AnimeCard({ item }: { item: AnimeWithEntry }) {
             No image
           </Box>
         )}
-      </Box>
+      </AppLink>
+
+      <Tooltip title={`Edit ${title}`}>
+        <IconButton
+          className="edit-action"
+          size="small"
+          onClick={() => onEdit(item)}
+          sx={{
+            position: "absolute",
+            bottom: 4,
+            right: 4,
+            bgcolor: "background.paper",
+            zIndex: 1,
+            opacity: 0,
+            pointerEvents: "none",
+            transition: "opacity 0.15s ease",
+          }}
+          aria-label={`Edit ${title}`}
+        >
+          <EditIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
 
       <CardContent
         sx={{
@@ -96,13 +136,18 @@ export default function AnimeCard({ item }: { item: AnimeWithEntry }) {
         }}
       >
         <Tooltip title={title} placement="top-start">
-          <Typography
-            variant="subtitle1"
-            noWrap
-            sx={{ fontWeight: 600, lineHeight: 1.3 }}
+          <AppLink
+            href={detailHref}
+            sx={{ color: "inherit", textDecoration: "none" }}
           >
-            {title}
-          </Typography>
+            <Typography
+              variant="subtitle1"
+              noWrap
+              sx={{ fontWeight: 600, lineHeight: 1.3 }}
+            >
+              {title}
+            </Typography>
+          </AppLink>
         </Tooltip>
 
         {item.titleJp && item.titleJp !== title && (

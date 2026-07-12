@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { AnimeCollectionItemForm } from "@/components/AnimeCollectionItemForm";
 
 export const metadata: Metadata = {
-  title: "Add to Anime Collection – Anime Client",
+  title: "Add to Anime Collection – Tsuki Client",
 };
 
 export default function AddAnimeCollectionItemPage() {

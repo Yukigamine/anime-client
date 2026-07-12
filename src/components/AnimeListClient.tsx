@@ -1,19 +1,14 @@
 "use client";
 
-import SearchIcon from "@mui/icons-material/Search";
-import {
-  Box,
-  Grid,
-  InputAdornment,
-  Tab,
-  Tabs,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { Box, Grid, Tab, Tabs, Typography } from "@mui/material";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { AnimeListEntry } from "@/generated/prisma/client";
 import type { AnimeWithEntry } from "@/lib/list";
+import { getAnimeDetailPath } from "@/lib/media-routing";
 import AnimeCard from "./AnimeCard";
+import AnimeListEntryEditModal from "./AnimeListEntryEditModal";
 import CardSkeleton from "./CardSkeleton";
+import ListSearchField from "./ListSearchField";
 
 type StatusTab =
   | "ALL"
@@ -41,10 +36,16 @@ export default function AnimeListClient({
 }) {
   const [activeTab, setActiveTab] = useState<StatusTab>("ALL");
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<AnimeWithEntry | null>(null);
+  const [localItems, setLocalItems] = useState<AnimeWithEntry[]>(items);
   const [isPending, startTransition] = useTransition();
   const tabCacheRef = useRef<Record<StatusTab, AnimeWithEntry[]>>(
     {} as Record<StatusTab, AnimeWithEntry[]>,
   );
+
+  useEffect(() => {
+    setLocalItems(items);
+  }, [items]);
 
   useEffect(() => {
     const cache: Record<StatusTab, AnimeWithEntry[]> = {} as Record<
@@ -53,16 +54,16 @@ export default function AnimeListClient({
     >;
     TABS.forEach(({ value: tab }) => {
       if (tab === "ALL") {
-        cache[tab] = items;
+        cache[tab] = localItems;
       } else {
-        cache[tab] = items.filter((i) => i.listEntry?.watchStatus === tab);
+        cache[tab] = localItems.filter((i) => i.listEntry?.watchStatus === tab);
       }
     });
     tabCacheRef.current = cache;
-  }, [items]);
+  }, [localItems]);
 
   const filtered = useMemo(() => {
-    let list = tabCacheRef.current[activeTab] ?? items;
+    let list = tabCacheRef.current[activeTab] ?? localItems;
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -73,7 +74,55 @@ export default function AnimeListClient({
       );
     }
     return list;
-  }, [activeTab, search, items]);
+  }, [activeTab, search, localItems]);
+
+  const applyOptimisticSave = (
+    animeId: string,
+    patch: {
+      watchStatus: AnimeListEntry["watchStatus"];
+      progress: number;
+      rating: number | null;
+      notes: string | null;
+      rewatchCount: number;
+      rewatching: boolean;
+    },
+  ) => {
+    setLocalItems((current) =>
+      current.map((item) => {
+        if (item.id !== animeId) return item;
+
+        const existing = item.listEntry;
+        return {
+          ...item,
+          listEntry: {
+            id: existing?.id ?? "optimistic",
+            animeId,
+            watchStatus: patch.watchStatus,
+            progress: patch.progress,
+            rating: patch.rating,
+            notes: patch.notes,
+            private: existing?.private ?? false,
+            rewatchCount: patch.rewatchCount,
+            rewatching: patch.rewatching,
+            kitsuEntryId: existing?.kitsuEntryId ?? null,
+            anilistEntryId: existing?.anilistEntryId ?? null,
+            startedAt: existing?.startedAt ?? null,
+            completedAt: existing?.completedAt ?? null,
+            createdAt: existing?.createdAt ?? new Date(),
+            updatedAt: new Date(),
+          },
+        };
+      }),
+    );
+  };
+
+  const applyOptimisticRemove = (animeId: string) => {
+    setLocalItems((current) =>
+      current.map((item) =>
+        item.id === animeId ? { ...item, listEntry: null } : item,
+      ),
+    );
+  };
 
   return (
     <Box>
@@ -128,22 +177,7 @@ export default function AnimeListClient({
           ))}
         </Tabs>
 
-        <TextField
-          size="small"
-          placeholder="Search…"
-          value={search}
-          onChange={(e) => startTransition(() => setSearch(e.target.value))}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            },
-          }}
-          sx={{ width: { xs: "100%", sm: 220 } }}
-        />
+        <ListSearchField onSearchChange={setSearch} />
       </Box>
 
       {isPending ? (
@@ -168,10 +202,32 @@ export default function AnimeListClient({
         <Grid container spacing={2}>
           {filtered.map((item) => (
             <Grid key={item.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-              <AnimeCard item={item} />
+              <AnimeCard
+                item={item}
+                detailHref={getAnimeDetailPath(item)}
+                onEdit={(next) => setSelected(next)}
+              />
             </Grid>
           ))}
         </Grid>
+      )}
+
+      {selected && (
+        <AnimeListEntryEditModal
+          open={Boolean(selected)}
+          onClose={() => setSelected(null)}
+          animeId={selected.id}
+          title={
+            selected.titleEn ??
+            selected.titleRomaji ??
+            selected.titleJp ??
+            "Unknown"
+          }
+          episodeCount={selected.episodeCount}
+          entry={selected.listEntry}
+          onSaved={(patch) => applyOptimisticSave(selected.id, patch)}
+          onRemoved={() => applyOptimisticRemove(selected.id)}
+        />
       )}
     </Box>
   );

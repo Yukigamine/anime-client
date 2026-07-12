@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import MangaListClient from "@/components/MangaListClient";
 import { getMangaList, getMangaListCounts } from "@/lib/list";
 
-export const metadata: Metadata = { title: "Manga List – Anime Client" };
+export const metadata: Metadata = { title: "Manga List – Tsuki Client" };
 export const dynamic = "force-dynamic";
 
 export default async function MangaListPage() {

@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { kitsuClient } from "@/lib/kitsu/client";
+import { kitsuBrowserClient } from "@/lib/kitsu/browser-client";
 import type {
   KitsuFavoriteItem,
   KitsuUserProfile,
@@ -10,7 +10,7 @@ import type {
 async function fetchKitsuProfile(
   slug: string,
 ): Promise<KitsuUserProfile | null> {
-  const result = await kitsuClient("query")({
+  const result = await kitsuBrowserClient("query")({
     findProfileBySlug: [
       { slug },
       {

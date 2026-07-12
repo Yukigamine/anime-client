@@ -4,6 +4,7 @@ import { Box } from "@mui/material";
 import { CollectionCard } from "@/components/CollectionCard";
 import { CollectionItemActions } from "@/components/CollectionItemActions";
 import type { Anime, AnimeCollectionItem } from "@/generated/prisma/client";
+import { getAnimeDetailPath } from "@/lib/media-routing";
 
 type Props = {
   items: (AnimeCollectionItem & { anime: Anime })[];
@@ -47,6 +48,7 @@ export function AnimeCollectionGrid({ items, isAuthenticated = false }: Props) {
           image={item.anime.coverImageUrl || "/placeholder.png"}
           imageAlt={item.anime.titleEn || ""}
           title={item.anime.titleEn || ""}
+          href={getAnimeDetailPath(item.anime)}
           actions={
             isAuthenticated ? (
               <CollectionItemActions

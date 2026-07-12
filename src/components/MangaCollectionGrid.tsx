@@ -5,6 +5,7 @@ import { CollectionCard } from "@/components/CollectionCard";
 import { CollectionItemActions } from "@/components/CollectionItemActions";
 import type { Manga, MangaCollectionItem } from "@/generated/prisma/client";
 import { formatContiguousRanges } from "@/lib/formatRanges";
+import { getMangaDetailPath } from "@/lib/media-routing";
 
 type Props = {
   items: (MangaCollectionItem & { manga: Manga })[];
@@ -79,6 +80,7 @@ export function MangaCollectionGrid({ items, isAuthenticated = false }: Props) {
             image={item.manga.coverImageUrl || "/placeholder.png"}
             imageAlt={item.manga.titleEn || ""}
             title={item.manga.titleEn || ""}
+            href={getMangaDetailPath(item.manga)}
             actions={
               isAuthenticated ? (
                 <CollectionItemActions

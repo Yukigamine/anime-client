@@ -1,7 +1,7 @@
 "use client";
 
 import { MappingExternalSiteEnum } from "@/lib/zeus/kitsu";
-import { kitsuClient } from "./client";
+import { kitsuBrowserClient } from "./browser-client";
 
 export type KitsuClientSearchResult = {
   kitsuId: string;
@@ -78,7 +78,7 @@ function mappingId(
 export async function searchAnimeByTitleClient(
   query: string,
 ): Promise<KitsuClientSearchResult[]> {
-  const result = await kitsuClient("query")({
+  const result = await kitsuBrowserClient("query")({
     searchAnimeByTitle: [
       { title: query, first: 10 },
       {
@@ -106,7 +106,7 @@ export async function searchAnimeByTitleClient(
 export async function searchMangaByTitleClient(
   query: string,
 ): Promise<KitsuClientSearchResult[]> {
-  const result = await kitsuClient("query")({
+  const result = await kitsuBrowserClient("query")({
     searchMangaByTitle: [
       { title: query, first: 10 },
       {
@@ -134,9 +134,9 @@ export async function searchMangaByTitleClient(
 export async function getAnimeResolvePayloadBySlug(
   kitsuId: string,
 ): Promise<KitsuAnimeResolvePayload | null> {
-  const result = await kitsuClient("query")({
-    findAnimeBySlug: [
-      { slug: kitsuId },
+  const result = await kitsuBrowserClient("query")({
+    findAnimeById: [
+      { id: kitsuId },
       {
         id: true,
         titles: { canonical: true, romanized: true, original: true },
@@ -152,7 +152,7 @@ export async function getAnimeResolvePayloadBySlug(
     ],
   });
 
-  const anime = result.findAnimeBySlug;
+  const anime = result.findAnimeById;
   if (!anime) return null;
 
   const mappings = anime.mappings?.nodes ?? [];
@@ -173,9 +173,9 @@ export async function getAnimeResolvePayloadBySlug(
 export async function getMangaResolvePayloadBySlug(
   kitsuId: string,
 ): Promise<KitsuMangaResolvePayload | null> {
-  const result = await kitsuClient("query")({
-    findMangaBySlug: [
-      { slug: kitsuId },
+  const result = await kitsuBrowserClient("query")({
+    findMangaById: [
+      { id: kitsuId },
       {
         id: true,
         titles: { canonical: true, romanized: true, original: true },
@@ -192,7 +192,7 @@ export async function getMangaResolvePayloadBySlug(
     ],
   });
 
-  const manga = result.findMangaBySlug;
+  const manga = result.findMangaById;
   if (!manga) return null;
 
   const mappings = manga.mappings?.nodes ?? [];
@@ -213,7 +213,7 @@ export async function getMangaResolvePayloadBySlug(
 export async function getAnimeSeriesDetailBySlug(
   kitsuId: string,
 ): Promise<KitsuAnimeSeriesDetail | null> {
-  const result = await kitsuClient("query")({
+  const result = await kitsuBrowserClient("query")({
     findAnimeBySlug: [
       { slug: kitsuId },
       {
@@ -242,7 +242,7 @@ export async function getAnimeSeriesDetailBySlug(
 export async function getMangaSeriesDetailBySlug(
   kitsuId: string,
 ): Promise<KitsuMangaSeriesDetail | null> {
-  const result = await kitsuClient("query")({
+  const result = await kitsuBrowserClient("query")({
     findMangaBySlug: [
       { slug: kitsuId },
       {

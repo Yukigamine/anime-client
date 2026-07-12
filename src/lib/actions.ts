@@ -1,10 +1,6 @@
 "use server";
 
 import {
-  logoutAndRedirectAction as logoutAndRedirectActionImpl,
-  logoutAppAction as logoutAppActionImpl,
-} from "./actions/auth";
-import {
   deleteInvalidEntriesAction as deleteInvalidEntriesActionImpl,
   findInvalidEntriesAction as findInvalidEntriesActionImpl,
   getSyncStatusAction as getSyncStatusActionImpl,
@@ -12,14 +8,6 @@ import {
   triggerSyncAction as triggerSyncActionImpl,
 } from "./actions/sync";
 import type { SyncDirection, SyncProvider } from "./actions/types";
-
-export async function logoutAndRedirectAction(provider: SyncProvider) {
-  return logoutAndRedirectActionImpl(provider);
-}
-
-export async function logoutAppAction() {
-  return logoutAppActionImpl();
-}
 
 export async function triggerSyncAction(
   provider: SyncProvider,

@@ -1,19 +1,14 @@
 "use client";
 
-import SearchIcon from "@mui/icons-material/Search";
-import {
-  Box,
-  Grid,
-  InputAdornment,
-  Tab,
-  Tabs,
-  TextField,
-  Typography,
-} from "@mui/material";
+import { Box, Grid, Tab, Tabs, Typography } from "@mui/material";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { MangaListEntry } from "@/generated/prisma/client";
 import type { MangaWithEntry } from "@/lib/list";
+import { getMangaDetailPath } from "@/lib/media-routing";
 import CardSkeleton from "./CardSkeleton";
+import ListSearchField from "./ListSearchField";
 import MangaCard from "./MangaCard";
+import MangaListEntryEditModal from "./MangaListEntryEditModal";
 
 type StatusTab =
   | "ALL"
@@ -27,7 +22,7 @@ const TABS: { value: StatusTab; label: string }[] = [
   { value: "ALL", label: "All" },
   { value: "READING", label: "Reading" },
   { value: "COMPLETED", label: "Completed" },
-  { value: "PLAN_TO_READ", label: "Plan to Read" },
+  { value: "PLAN_TO_READ", label: "Want to Read" },
   { value: "ON_HOLD", label: "On Hold" },
   { value: "DROPPED", label: "Dropped" },
 ];
@@ -41,10 +36,16 @@ export default function MangaListClient({
 }) {
   const [activeTab, setActiveTab] = useState<StatusTab>("ALL");
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<MangaWithEntry | null>(null);
+  const [localItems, setLocalItems] = useState<MangaWithEntry[]>(items);
   const [isPending, startTransition] = useTransition();
   const tabCacheRef = useRef<Record<StatusTab, MangaWithEntry[]>>(
     {} as Record<StatusTab, MangaWithEntry[]>,
   );
+
+  useEffect(() => {
+    setLocalItems(items);
+  }, [items]);
 
   useEffect(() => {
     const cache: Record<StatusTab, MangaWithEntry[]> = {} as Record<
@@ -53,16 +54,16 @@ export default function MangaListClient({
     >;
     TABS.forEach(({ value: tab }) => {
       if (tab === "ALL") {
-        cache[tab] = items;
+        cache[tab] = localItems;
       } else {
-        cache[tab] = items.filter((i) => i.listEntry?.readStatus === tab);
+        cache[tab] = localItems.filter((i) => i.listEntry?.readStatus === tab);
       }
     });
     tabCacheRef.current = cache;
-  }, [items]);
+  }, [localItems]);
 
   const filtered = useMemo(() => {
-    let list = tabCacheRef.current[activeTab] ?? items;
+    let list = tabCacheRef.current[activeTab] ?? localItems;
     const q = search.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -73,7 +74,57 @@ export default function MangaListClient({
       );
     }
     return list;
-  }, [activeTab, search, items]);
+  }, [activeTab, search, localItems]);
+
+  const applyOptimisticSave = (
+    mangaId: string,
+    patch: {
+      readStatus: MangaListEntry["readStatus"];
+      progress: number;
+      progressVolumes: number;
+      rating: number | null;
+      notes: string | null;
+      rereadCount: number;
+      rereading: boolean;
+    },
+  ) => {
+    setLocalItems((current) =>
+      current.map((item) => {
+        if (item.id !== mangaId) return item;
+
+        const existing = item.listEntry;
+        return {
+          ...item,
+          listEntry: {
+            id: existing?.id ?? "optimistic",
+            mangaId,
+            readStatus: patch.readStatus,
+            progress: patch.progress,
+            progressVolumes: patch.progressVolumes,
+            rating: patch.rating,
+            notes: patch.notes,
+            private: existing?.private ?? false,
+            rereadCount: patch.rereadCount,
+            rereading: patch.rereading,
+            kitsuEntryId: existing?.kitsuEntryId ?? null,
+            anilistEntryId: existing?.anilistEntryId ?? null,
+            startedAt: existing?.startedAt ?? null,
+            completedAt: existing?.completedAt ?? null,
+            createdAt: existing?.createdAt ?? new Date(),
+            updatedAt: new Date(),
+          },
+        };
+      }),
+    );
+  };
+
+  const applyOptimisticRemove = (mangaId: string) => {
+    setLocalItems((current) =>
+      current.map((item) =>
+        item.id === mangaId ? { ...item, listEntry: null } : item,
+      ),
+    );
+  };
 
   return (
     <Box>
@@ -128,22 +179,7 @@ export default function MangaListClient({
           ))}
         </Tabs>
 
-        <TextField
-          size="small"
-          placeholder="Search…"
-          value={search}
-          onChange={(e) => startTransition(() => setSearch(e.target.value))}
-          slotProps={{
-            input: {
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon fontSize="small" />
-                </InputAdornment>
-              ),
-            },
-          }}
-          sx={{ width: { xs: "100%", sm: 220 } }}
-        />
+        <ListSearchField onSearchChange={setSearch} />
       </Box>
 
       {isPending ? (
@@ -168,10 +204,33 @@ export default function MangaListClient({
         <Grid container spacing={2}>
           {filtered.map((item) => (
             <Grid key={item.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-              <MangaCard item={item} />
+              <MangaCard
+                item={item}
+                detailHref={getMangaDetailPath(item)}
+                onEdit={(next) => setSelected(next)}
+              />
             </Grid>
           ))}
         </Grid>
+      )}
+
+      {selected && (
+        <MangaListEntryEditModal
+          open={Boolean(selected)}
+          onClose={() => setSelected(null)}
+          mangaId={selected.id}
+          title={
+            selected.titleEn ??
+            selected.titleRomaji ??
+            selected.titleJp ??
+            "Unknown"
+          }
+          chapterCount={selected.chapterCount}
+          volumeCount={selected.volumeCount}
+          entry={selected.listEntry}
+          onSaved={(patch) => applyOptimisticSave(selected.id, patch)}
+          onRemoved={() => applyOptimisticRemove(selected.id)}
+        />
       )}
     </Box>
   );

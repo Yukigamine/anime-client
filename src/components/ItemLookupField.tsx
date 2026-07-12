@@ -10,7 +10,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useEffect, useRef, useState } from "react";
-import type { KitsuSearchResult } from "@/lib/actions/collection";
+import type { KitsuSearchResult } from "@/lib/actions/collection/types";
 import {
   searchAnimeByTitleClient,
   searchMangaByTitleClient,

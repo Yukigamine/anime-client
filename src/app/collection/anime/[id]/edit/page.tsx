@@ -5,7 +5,7 @@ import { AnimeCollectionItemForm } from "@/components/AnimeCollectionItemForm";
 import prisma from "@/lib/prisma";
 
 export const metadata: Metadata = {
-  title: "Edit Collection Item – Anime Client",
+  title: "Edit Collection Item – Tsuki Client",
 };
 
 type Props = { params: Promise<{ id: string }> };

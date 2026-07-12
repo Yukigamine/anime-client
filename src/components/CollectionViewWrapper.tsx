@@ -24,6 +24,7 @@ import type {
   MangaCollectionItem,
 } from "@/generated/prisma/client";
 import { formatContiguousRanges } from "@/lib/formatRanges";
+import { getAnimeDetailPath, getMangaDetailPath } from "@/lib/media-routing";
 
 type AnimeItem = AnimeCollectionItem & { anime: Anime };
 type MangaItem = MangaCollectionItem & { manga: Manga };
@@ -81,18 +82,21 @@ export function CollectionViewWrapper<T extends Item>({
     if ("anime" in item) {
       const anime = item.anime as Anime;
       return anime.titleEn ?? anime.titleRomaji ?? anime.titleJp ?? "Unknown";
-    } else {
-      const manga = item.manga as Manga;
-      return manga.titleEn ?? manga.titleRomaji ?? manga.titleJp ?? "Unknown";
     }
+    const manga = item.manga as Manga;
+    return manga.titleEn ?? manga.titleRomaji ?? manga.titleJp ?? "Unknown";
   };
 
   const getCoverUrl = (item: T): string => {
-    if ("anime" in item) {
+    if ("anime" in item)
       return (item.anime as Anime).coverImageUrl || "/placeholder.png";
-    } else {
-      return (item.manga as Manga).coverImageUrl || "/placeholder.png";
-    }
+    return (item.manga as Manga).coverImageUrl || "/placeholder.png";
+  };
+
+  const getDetailPath = (item: T): string => {
+    return "anime" in item
+      ? getAnimeDetailPath(item.anime as Anime)
+      : getMangaDetailPath(item.manga as Manga);
   };
 
   return (
@@ -155,7 +159,15 @@ export function CollectionViewWrapper<T extends Item>({
                         }}
                       />
                     </TableCell>
-                    <TableCell sx={{ fontWeight: 500 }}>{title}</TableCell>
+                    <TableCell sx={{ fontWeight: 500 }}>
+                      <Box
+                        component="a"
+                        href={getDetailPath(item)}
+                        sx={{ color: "inherit", textDecoration: "none" }}
+                      >
+                        {title}
+                      </Box>
+                    </TableCell>
                     {type !== "manga" && (
                       <>
                         <TableCell>

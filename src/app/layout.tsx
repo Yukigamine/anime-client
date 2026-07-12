@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Anime Client",
+  title: "Tsuki Client",
   description: "Personal anime & manga tracking",
 };
 
@@ -34,10 +34,11 @@ export default function RootLayout({
               minHeight: "100dvh",
               display: "flex",
               flexDirection: "column",
+              overflow: "visible",
             }}
           >
             <NavBar />
-            <Box component="main" sx={{ flex: 1 }}>
+            <Box component="main" sx={{ flex: 1, overflow: "visible" }}>
               {children}
             </Box>
             <Footer />

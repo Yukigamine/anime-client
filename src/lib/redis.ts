@@ -21,23 +21,10 @@ async function getRedis() {
 
 export const ANIME_LIST_KEY = "anime:list";
 export const MANGA_LIST_KEY = "manga:list";
-export const ANIME_SERIES_KEY = "anime:series";
-export const MANGA_SERIES_KEY = "manga:series";
-export const ANIME_SEARCH_KEY = "anime:search";
-export const MANGA_SEARCH_KEY = "manga:search";
 
 // ─── TTLs ─────────────────────────────────────────────────────────────────────
 
 export const LIST_TTL = 60 * 5; // 5 minutes
-export const SERIES_TTL_MAX = 60 * 60 * 24 * 7; // 7 days
-
-/** Returns TTL in seconds: min(updatedAt + 7 days, now + 7 days) capped at 7d. */
-export function computeSeriesTTL(updatedAt: Date): number {
-  const nowSec = Math.floor(Date.now() / 1000);
-  const updatedSec = Math.floor(updatedAt.getTime() / 1000);
-  const remaining = updatedSec + SERIES_TTL_MAX - nowSec;
-  return Math.max(1, Math.min(remaining, SERIES_TTL_MAX));
-}
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 

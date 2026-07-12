@@ -16,7 +16,7 @@ import { getAuthStatus } from "@/lib/provider-links";
 import { getSession } from "@/lib/session";
 import LinkFlashSnackbar from "./LinkFlashSnackbar";
 
-export const metadata: Metadata = { title: "Login – Anime Client" };
+export const metadata: Metadata = { title: "Login – Tsuki Client" };
 export const dynamic = "force-dynamic";
 
 export default async function LoginPage({

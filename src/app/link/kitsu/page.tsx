@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getSession } from "@/lib/session";
 import KitsuLoginForm from "./KitsuLoginForm";
 
-export const metadata: Metadata = { title: "Kitsu Login – Anime Client" };
+export const metadata: Metadata = { title: "Kitsu Login – Tsuki Client" };
 
 export default async function KitsuLoginPage() {
   const session = await getSession();

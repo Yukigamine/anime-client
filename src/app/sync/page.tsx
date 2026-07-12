@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import SyncDashboard from "@/components/SyncDashboard";
 import { getSession } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Sync – Anime Client" };
+export const metadata: Metadata = { title: "Sync – Tsuki Client" };
 
 export default async function SyncPage() {
   const session = await getSession();

@@ -14,19 +14,9 @@ import type {
   ActionResult,
   AnimeCollectionItemInput,
   AnimeResolvePayload,
-  KitsuSearchResult,
   MangaCollectionItemInput,
   MangaResolvePayload,
 } from "./collection/types";
-
-export type {
-  ActionResult,
-  AnimeCollectionItemInput,
-  AnimeResolvePayload,
-  KitsuSearchResult,
-  MangaCollectionItemInput,
-  MangaResolvePayload,
-};
 
 export async function addAnimeCollectionItem(
   input: AnimeCollectionItemInput,

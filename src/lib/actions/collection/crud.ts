@@ -222,7 +222,23 @@ export async function resolveAnimeId(
       where: { kitsuId: data.kitsuId },
       select: { id: true },
     });
-    if (existing) return { ok: true, data: existing.id };
+    if (existing) {
+      await prisma.anime.update({
+        where: { id: existing.id },
+        data: {
+          anilistId: data.anilistId ?? undefined,
+          malId: data.malId ?? undefined,
+          titleEn: data.titleEn ?? undefined,
+          titleRomaji: data.titleRomaji ?? undefined,
+          titleJp: data.titleJp ?? undefined,
+          episodeCount: data.episodeCount ?? undefined,
+          averageRating: data.averageRating ?? undefined,
+          coverImageUrl: data.coverImageUrl ?? undefined,
+          bannerImageUrl: data.bannerImageUrl ?? undefined,
+        },
+      });
+      return { ok: true, data: existing.id };
+    }
 
     const created = await prisma.anime.create({
       data: {
@@ -261,7 +277,23 @@ export async function resolveMangaId(
       where: { kitsuId: data.kitsuId },
       select: { id: true },
     });
-    if (existing) return { ok: true, data: existing.id };
+    if (existing) {
+      await prisma.manga.update({
+        where: { id: existing.id },
+        data: {
+          anilistId: data.anilistId ?? undefined,
+          malId: data.malId ?? undefined,
+          titleEn: data.titleEn ?? undefined,
+          titleRomaji: data.titleRomaji ?? undefined,
+          titleJp: data.titleJp ?? undefined,
+          chapterCount: data.chapterCount ?? undefined,
+          volumeCount: data.volumeCount ?? undefined,
+          averageRating: data.averageRating ?? undefined,
+          coverImageUrl: data.coverImageUrl ?? undefined,
+        },
+      });
+      return { ok: true, data: existing.id };
+    }
 
     const created = await prisma.manga.create({
       data: {

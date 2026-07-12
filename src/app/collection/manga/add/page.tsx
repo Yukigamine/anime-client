@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { MangaCollectionItemForm } from "@/components/MangaCollectionItemForm";
 
 export const metadata: Metadata = {
-  title: "Add to Manga Collection – Anime Client",
+  title: "Add to Manga Collection – Tsuki Client",
 };
 
 export default function AddMangaCollectionItemPage() {

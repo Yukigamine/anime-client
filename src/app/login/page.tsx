@@ -4,7 +4,7 @@ import type { LoginProvider } from "@/components/LoginForm";
 import LoginForm from "@/components/LoginForm";
 import { getSession } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Sign in– Anime Client" };
+export const metadata: Metadata = { title: "Sign in– Tsuki Client" };
 
 const PROVIDER_COLORS: Record<string, string> = {
   google: "#4285F4",

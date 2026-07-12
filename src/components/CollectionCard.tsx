@@ -1,6 +1,7 @@
 "use client";
 
 import { Box, Card, CardContent, CardMedia, Typography } from "@mui/material";
+import AppLink from "@/components/Link";
 
 type Chip = {
   label: string;
@@ -12,6 +13,7 @@ type Props = {
   image: string;
   imageAlt: string;
   title: string;
+  href: string;
   actions: React.ReactNode;
   chips: Chip[];
 };
@@ -20,6 +22,7 @@ export function CollectionCard({
   image,
   imageAlt,
   title,
+  href,
   actions,
   chips,
 }: Props) {
@@ -32,15 +35,17 @@ export function CollectionCard({
         position: "relative",
       }}
     >
-      <CardMedia
-        component="img"
-        image={image}
-        alt={imageAlt}
-        sx={{
-          height: 280,
-          objectFit: "cover",
-        }}
-      />
+      <AppLink href={href} aria-label={`View ${title}`}>
+        <CardMedia
+          component="img"
+          image={image}
+          alt={imageAlt}
+          sx={{
+            height: 280,
+            objectFit: "cover",
+          }}
+        />
+      </AppLink>
       <CardContent sx={{ flexGrow: 1, pb: 1 }}>
         <Box
           sx={{
@@ -51,20 +56,29 @@ export function CollectionCard({
             mb: 1,
           }}
         >
-          <Typography
-            variant="subtitle2"
+          <AppLink
+            href={href}
             sx={{
-              fontWeight: 600,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
               flex: 1,
+              minWidth: 0,
+              color: "inherit",
+              textDecoration: "none",
             }}
           >
-            {title}
-          </Typography>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: 600,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                display: "-webkit-box",
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: "vertical",
+              }}
+            >
+              {title}
+            </Typography>
+          </AppLink>
           <Box sx={{ flexShrink: 0 }}>{actions}</Box>
         </Box>
         <Box

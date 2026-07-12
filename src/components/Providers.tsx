@@ -3,6 +3,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import {
   Alert,
   CssBaseline,
+  GlobalStyles,
   IconButton,
   ThemeProvider,
   Typography,
@@ -124,6 +125,18 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     <AppRouterCacheProvider>
       <ThemeProvider theme={theme} defaultMode="system">
         <CssBaseline />
+        <GlobalStyles
+          styles={{
+            html: {
+              height: "auto",
+              overflow: "visible",
+            },
+            body: {
+              height: "auto",
+              overflow: "visible",
+            },
+          }}
+        />
         <SnackbarProvider
           maxSnack={3}
           anchorOrigin={{

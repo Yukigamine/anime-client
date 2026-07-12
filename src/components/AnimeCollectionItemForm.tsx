@@ -21,15 +21,15 @@ import type {
   CollectionRarity,
   MediaFormat,
 } from "@/generated/prisma/enums";
-import type {
-  AnimeCollectionItemInput,
-  KitsuSearchResult,
-} from "@/lib/actions/collection";
 import {
   addAnimeCollectionItem,
   editAnimeCollectionItem,
   resolveAnimeId,
 } from "@/lib/actions/collection";
+import type {
+  AnimeCollectionItemInput,
+  KitsuSearchResult,
+} from "@/lib/actions/collection/types";
 import {
   getAnimeResolvePayloadBySlug,
   getAnimeSeriesDetailBySlug,
