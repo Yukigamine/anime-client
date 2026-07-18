@@ -3,6 +3,10 @@ import "server-only";
 import { ReadStatus, ShowStatus, WatchStatus } from "@/generated/prisma/client";
 import prisma from "@/lib/prisma";
 import {
+  invalidateAnimeTitleCache,
+  invalidateMangaTitleCache,
+} from "@/lib/redis";
+import {
   validateAnimeListEntry,
   validateMangaListEntry,
   validateMediaRecord,
@@ -329,12 +333,33 @@ async function applyAnimeEntry(entry: KitsuLibraryEntry): Promise<boolean> {
   let mediaChanged = false;
 
   if (animeRecord) {
+    if (animeRecord.kitsuId && animeRecord.kitsuId !== media.id) {
+      throw new Error("conflicting Kitsu ID");
+    }
+    if (
+      anilistId &&
+      animeRecord.anilistId &&
+      animeRecord.anilistId !== anilistId
+    ) {
+      throw new Error("conflicting AniList ID");
+    }
+    if (malId && animeRecord.malId && animeRecord.malId !== malId) {
+      throw new Error("conflicting MyAnimeList ID");
+    }
+
     const updateData = { ...sharedMedia };
     if (animeRecord.anilistId) {
       delete updateData.anilistId;
     }
 
-    if (animeMediaNeedsUpdate(animeRecord, sharedMedia)) {
+    const identifiersNeedUpdate =
+      !animeRecord.kitsuId ||
+      (anilistId !== null && !animeRecord.anilistId) ||
+      (malId !== null && !animeRecord.malId);
+    if (
+      animeMediaNeedsUpdate(animeRecord, sharedMedia) ||
+      identifiersNeedUpdate
+    ) {
       animeRecord = await prisma.anime.update({
         where: { id: animeRecord.id },
         data: updateData,
@@ -344,6 +369,10 @@ async function applyAnimeEntry(entry: KitsuLibraryEntry): Promise<boolean> {
   } else {
     animeRecord = await prisma.anime.create({ data: sharedMedia });
     mediaChanged = true;
+  }
+
+  if (mediaChanged) {
+    await invalidateAnimeTitleCache(animeRecord.id, animeRecord.kitsuId);
   }
 
   const entryData = {
@@ -442,12 +471,33 @@ async function applyMangaEntry(entry: KitsuLibraryEntry): Promise<boolean> {
   let mediaChanged = false;
 
   if (mangaRecord) {
+    if (mangaRecord.kitsuId && mangaRecord.kitsuId !== media.id) {
+      throw new Error("conflicting Kitsu ID");
+    }
+    if (
+      anilistId &&
+      mangaRecord.anilistId &&
+      mangaRecord.anilistId !== anilistId
+    ) {
+      throw new Error("conflicting AniList ID");
+    }
+    if (malId && mangaRecord.malId && mangaRecord.malId !== malId) {
+      throw new Error("conflicting MyAnimeList ID");
+    }
+
     const updateData = { ...sharedMedia };
     if (mangaRecord.anilistId) {
       delete updateData.anilistId;
     }
 
-    if (mangaMediaNeedsUpdate(mangaRecord, sharedMedia)) {
+    const identifiersNeedUpdate =
+      !mangaRecord.kitsuId ||
+      (anilistId !== null && !mangaRecord.anilistId) ||
+      (malId !== null && !mangaRecord.malId);
+    if (
+      mangaMediaNeedsUpdate(mangaRecord, sharedMedia) ||
+      identifiersNeedUpdate
+    ) {
       mangaRecord = await prisma.manga.update({
         where: { id: mangaRecord.id },
         data: updateData,
@@ -457,6 +507,10 @@ async function applyMangaEntry(entry: KitsuLibraryEntry): Promise<boolean> {
   } else {
     mangaRecord = await prisma.manga.create({ data: sharedMedia });
     mediaChanged = true;
+  }
+
+  if (mediaChanged) {
+    await invalidateMangaTitleCache(mangaRecord.id, mangaRecord.kitsuId);
   }
 
   const entryData = {

@@ -72,10 +72,10 @@ export async function triggerSyncAction(
 }
 
 export async function getSyncStatusAction(): Promise<SyncStatusPayload> {
-  await requireSession();
+  const session = await requireSession();
   const [logs, auth] = await Promise.all([
     prisma.syncLog.findMany({ orderBy: { startedAt: "desc" }, take: 20 }),
-    getAuthStatus(),
+    getAuthStatus(session.user.id),
   ]);
   return { logs, auth };
 }
@@ -91,6 +91,8 @@ export async function findInvalidEntriesAction(): Promise<InvalidEntriesResult> 
   for (const entry of animeEntries) {
     const entryIssues = validateAnimeListEntry(entry);
     const mediaIssues = validateMediaRecord(entry.anime);
+    if (!entry.anime.kitsuId) mediaIssues.push("missing Kitsu ID");
+    if (!entry.anime.anilistId) mediaIssues.push("missing AniList ID");
     if (entry.anime.episodeCount && entry.progress > entry.anime.episodeCount) {
       entryIssues.push("progress exceeds episode count");
     }
@@ -109,6 +111,8 @@ export async function findInvalidEntriesAction(): Promise<InvalidEntriesResult> 
   for (const entry of mangaEntries) {
     const entryIssues = validateMangaListEntry(entry);
     const mediaIssues = validateMediaRecord(entry.manga);
+    if (!entry.manga.kitsuId) mediaIssues.push("missing Kitsu ID");
+    if (!entry.manga.anilistId) mediaIssues.push("missing AniList ID");
     if (entry.manga.chapterCount && entry.progress > entry.manga.chapterCount) {
       entryIssues.push("progress exceeds chapter count");
     }

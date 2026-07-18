@@ -7,6 +7,7 @@ import {
   KitsuLibrarySyncPayloadSchema,
 } from "@/lib/kitsu/sync-payload";
 import prisma from "@/lib/prisma";
+import { invalidateListCache } from "@/lib/redis";
 import { requireSession } from "@/lib/session";
 
 type KitsuSyncDirection = "PULL" | "PUSH";
@@ -29,6 +30,7 @@ export type KitsuPushSnapshot = {
     anime: {
       id: string;
       kitsuId: string | null;
+      anilistId: number | null;
       malId: number | null;
       titleEn: string | null;
       episodeCount: number | null;
@@ -51,6 +53,7 @@ export type KitsuPushSnapshot = {
     manga: {
       id: string;
       kitsuId: string | null;
+      anilistId: number | null;
       malId: number | null;
       titleEn: string | null;
       chapterCount: number | null;
@@ -140,6 +143,7 @@ export async function getKitsuPushSnapshotAction(): Promise<{
             select: {
               id: true,
               kitsuId: true,
+              anilistId: true,
               malId: true,
               titleEn: true,
               episodeCount: true,
@@ -153,6 +157,7 @@ export async function getKitsuPushSnapshotAction(): Promise<{
             select: {
               id: true,
               kitsuId: true,
+              anilistId: true,
               malId: true,
               titleEn: true,
               chapterCount: true,
@@ -163,6 +168,140 @@ export async function getKitsuPushSnapshotAction(): Promise<{
     ]);
 
     return { ok: true, data: { anime, manga } };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export async function persistKitsuMappingsAction(input: {
+  anime: Array<{ id: string; kitsuId: string }>;
+  manga: Array<{ id: string; kitsuId: string }>;
+}): Promise<
+  | { ok: true; data: { anime: number; manga: number; errors: string[] } }
+  | { ok: false; error: string }
+> {
+  await requireSession();
+
+  try {
+    const errors: string[] = [];
+    let anime = 0;
+    let manga = 0;
+
+    for (const mapping of input.anime) {
+      const record = await prisma.anime.findUnique({
+        where: { id: mapping.id },
+        select: { kitsuId: true, titleEn: true },
+      });
+      if (!record) {
+        errors.push(`anime ${mapping.id} no longer exists`);
+      } else if (record.kitsuId && record.kitsuId !== mapping.kitsuId) {
+        errors.push(
+          `anime "${record.titleEn ?? mapping.id}" has a conflicting Kitsu ID`,
+        );
+      } else if (!record.kitsuId) {
+        await prisma.anime.update({
+          where: { id: mapping.id },
+          data: { kitsuId: mapping.kitsuId },
+        });
+        anime++;
+      }
+    }
+
+    for (const mapping of input.manga) {
+      const record = await prisma.manga.findUnique({
+        where: { id: mapping.id },
+        select: { kitsuId: true, titleEn: true },
+      });
+      if (!record) {
+        errors.push(`manga ${mapping.id} no longer exists`);
+      } else if (record.kitsuId && record.kitsuId !== mapping.kitsuId) {
+        errors.push(
+          `manga "${record.titleEn ?? mapping.id}" has a conflicting Kitsu ID`,
+        );
+      } else if (!record.kitsuId) {
+        await prisma.manga.update({
+          where: { id: mapping.id },
+          data: { kitsuId: mapping.kitsuId },
+        });
+        manga++;
+      }
+    }
+
+    if (anime > 0 || manga > 0) {
+      await invalidateListCache();
+    }
+
+    return { ok: true, data: { anime, manga, errors } };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+export async function persistAniListMappingsAction(input: {
+  anime: Array<{ id: string; anilistId: number }>;
+  manga: Array<{ id: string; anilistId: number }>;
+}): Promise<
+  | { ok: true; data: { anime: number; manga: number; errors: string[] } }
+  | { ok: false; error: string }
+> {
+  await requireSession();
+
+  try {
+    const errors: string[] = [];
+    let anime = 0;
+    let manga = 0;
+
+    for (const mapping of input.anime) {
+      const record = await prisma.anime.findUnique({
+        where: { id: mapping.id },
+        select: { anilistId: true, titleEn: true },
+      });
+      if (!record) {
+        errors.push(`anime ${mapping.id} no longer exists`);
+      } else if (record.anilistId && record.anilistId !== mapping.anilistId) {
+        errors.push(
+          `anime "${record.titleEn ?? mapping.id}" has a conflicting AniList ID`,
+        );
+      } else if (!record.anilistId) {
+        await prisma.anime.update({
+          where: { id: mapping.id },
+          data: { anilistId: mapping.anilistId },
+        });
+        anime++;
+      }
+    }
+
+    for (const mapping of input.manga) {
+      const record = await prisma.manga.findUnique({
+        where: { id: mapping.id },
+        select: { anilistId: true, titleEn: true },
+      });
+      if (!record) {
+        errors.push(`manga ${mapping.id} no longer exists`);
+      } else if (record.anilistId && record.anilistId !== mapping.anilistId) {
+        errors.push(
+          `manga "${record.titleEn ?? mapping.id}" has a conflicting AniList ID`,
+        );
+      } else if (!record.anilistId) {
+        await prisma.manga.update({
+          where: { id: mapping.id },
+          data: { anilistId: mapping.anilistId },
+        });
+        manga++;
+      }
+    }
+
+    if (anime > 0 || manga > 0) {
+      await invalidateListCache();
+    }
+
+    return { ok: true, data: { anime, manga, errors } };
   } catch (err) {
     return {
       ok: false,
@@ -192,6 +331,7 @@ export async function syncKitsuLibraryAction(input: unknown): Promise<{
   const payload: KitsuLibrarySyncPayload = parsed.data;
   const result = await applyKitsuLibrarySync(payload);
 
+  await invalidateListCache();
   await Promise.all([
     revalidatePath("/sync"),
     revalidatePath("/list/anime"),

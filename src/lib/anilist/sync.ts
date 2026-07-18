@@ -3,6 +3,10 @@ import { ReadStatus, ShowStatus, WatchStatus } from "@/generated/prisma/client";
 import prisma from "@/lib/prisma";
 import { getToken } from "@/lib/provider-links";
 import {
+  invalidateAnimeTitleCache,
+  invalidateMangaTitleCache,
+} from "@/lib/redis";
+import {
   selectTitleFromAniList,
   validateAnimeListEntry,
   validateMangaListEntry,
@@ -327,6 +331,7 @@ async function pullAnimeItem(item: AniListListItem): Promise<boolean> {
         where: { id: animeRecord.id },
         data: { episodeCount: media.episodes ?? null },
       });
+      await invalidateAnimeTitleCache(animeRecord.id, animeRecord.kitsuId);
     }
   } else {
     // For new anime: pull all details and let Kitsu overwrite if there are mismatches
@@ -474,6 +479,7 @@ async function pullMangaItem(item: AniListListItem): Promise<boolean> {
         where: { id: mangaRecord.id },
         data: updates,
       });
+      await invalidateMangaTitleCache(mangaRecord.id, mangaRecord.kitsuId);
     }
   } else {
     // For new manga: pull all details and let Kitsu overwrite if there are mismatches

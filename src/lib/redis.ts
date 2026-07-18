@@ -21,10 +21,13 @@ async function getRedis() {
 
 export const ANIME_LIST_KEY = "anime:list";
 export const MANGA_LIST_KEY = "manga:list";
+export const ANIME_TITLE_KEY = "anime:title";
+export const MANGA_TITLE_KEY = "manga:title";
 
 // ─── TTLs ─────────────────────────────────────────────────────────────────────
 
 export const LIST_TTL = 60 * 5; // 5 minutes
+export const TITLE_TTL = 60 * 30; // 30 minutes
 
 // ─── Primitives ───────────────────────────────────────────────────────────────
 
@@ -53,6 +56,15 @@ export async function setCached<T>(
   }
 }
 
+async function deleteCached(key: string): Promise<void> {
+  try {
+    const r = await getRedis();
+    await r.del(key);
+  } catch (err) {
+    console.error(`[cache] Failed to delete ${key}:`, err);
+  }
+}
+
 async function invalidateByPrefix(prefix: string): Promise<void> {
   try {
     const r = await getRedis();
@@ -71,6 +83,28 @@ export async function invalidateAnimeListCache(): Promise<void> {
 
 export async function invalidateMangaListCache(): Promise<void> {
   await invalidateByPrefix(MANGA_LIST_KEY);
+}
+
+export async function invalidateAnimeTitleCache(
+  id: string,
+  kitsuId: string | null,
+): Promise<void> {
+  await Promise.all(
+    [id, kitsuId]
+      .filter((identifier): identifier is string => identifier !== null)
+      .map((identifier) => deleteCached(`${ANIME_TITLE_KEY}:${identifier}`)),
+  );
+}
+
+export async function invalidateMangaTitleCache(
+  id: string,
+  kitsuId: string | null,
+): Promise<void> {
+  await Promise.all(
+    [id, kitsuId]
+      .filter((identifier): identifier is string => identifier !== null)
+      .map((identifier) => deleteCached(`${MANGA_TITLE_KEY}:${identifier}`)),
+  );
 }
 
 /** Invalidates both anime and manga list caches (use after a full sync). */

@@ -60,10 +60,23 @@ export function formatProfileDate(iso: string): string {
   });
 }
 
-export function daysAgo(iso: string): number {
-  return Math.floor(
-    (Date.now() - new Date(iso).getTime()) / (1000 * 60 * 60 * 24),
-  );
+export function formatElapsedSince(iso: string): string {
+  const elapsedMs = Math.max(0, Date.now() - new Date(iso).getTime());
+  const elapsedDays = Math.floor(elapsedMs / (1000 * 60 * 60 * 24));
+  const elapsedHours = Math.floor(elapsedMs / (1000 * 60 * 60));
+  const elapsedMinutes = Math.floor(elapsedMs / (1000 * 60));
+  const units = [
+    { value: Math.floor(elapsedDays / 365), label: "year" },
+    { value: Math.floor(elapsedDays / 30), label: "month" },
+    { value: Math.floor(elapsedDays / 7), label: "week" },
+    { value: elapsedDays, label: "day" },
+    { value: elapsedHours, label: "hour" },
+    { value: elapsedMinutes, label: "minute" },
+  ];
+  const unit = units.find(({ value }) => value > 0);
+
+  if (!unit) return "less than a minute";
+  return `${unit.value} ${unit.label}${unit.value === 1 ? "" : "s"}`;
 }
 
 export function ageFromBirthday(iso: string): number {

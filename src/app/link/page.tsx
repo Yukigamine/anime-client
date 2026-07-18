@@ -11,6 +11,7 @@ import {
   Typography,
 } from "@mui/material";
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import { logoutAndRedirectAction } from "@/lib/actions/auth";
 import { getAuthStatus } from "@/lib/provider-links";
 import { getSession } from "@/lib/session";
@@ -24,11 +25,10 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  const [auth, params, _session] = await Promise.all([
-    getAuthStatus(),
-    searchParams,
-    getSession(),
-  ]);
+  const [params, session] = await Promise.all([searchParams, getSession()]);
+  if (!session) redirect("/login?next=/link");
+
+  const auth = await getAuthStatus(session.user.id);
   const error = params.error;
 
   return (

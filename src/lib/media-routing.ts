@@ -13,7 +13,7 @@ function preferredTitle(input: {
   );
 }
 
-function slugifyTitle(title: string): string {
+export function slugifyTitle(title: string): string {
   const normalized = title
     .toLowerCase()
     .normalize("NFKD")

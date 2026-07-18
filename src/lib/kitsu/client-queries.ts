@@ -57,6 +57,75 @@ export type KitsuMangaSeriesDetail = {
   updatedAt: string;
 };
 
+type KitsuMediaType = "anime" | "manga";
+
+export async function resolveKitsuIdByExternalIdsClient(
+  mediaType: KitsuMediaType,
+  input: { anilistId: number | null; malId: number | null },
+): Promise<string | null> {
+  const mappings = [
+    input.anilistId == null
+      ? null
+      : {
+          externalId: input.anilistId,
+          externalSite:
+            mediaType === "anime"
+              ? MappingExternalSiteEnum.ANILIST_ANIME
+              : MappingExternalSiteEnum.ANILIST_MANGA,
+        },
+    input.malId == null
+      ? null
+      : {
+          externalId: input.malId,
+          externalSite:
+            mediaType === "anime"
+              ? MappingExternalSiteEnum.MYANIMELIST_ANIME
+              : MappingExternalSiteEnum.MYANIMELIST_MANGA,
+        },
+  ].filter(
+    (
+      mapping,
+    ): mapping is {
+      externalId: number;
+      externalSite: MappingExternalSiteEnum;
+    } => mapping !== null,
+  );
+
+  for (const mapping of mappings) {
+    const result = await kitsuBrowserClient("query")({
+      lookupMapping: [
+        mapping,
+        {
+          __typename: true,
+          "...on Anime": { id: true },
+          "...on Manga": { id: true },
+        },
+      ],
+    });
+    const item = result.lookupMapping as
+      | { __typename?: string; id?: string | number | null }
+      | null
+      | undefined;
+    const expectedType = mediaType === "anime" ? "Anime" : "Manga";
+    if (item?.__typename === expectedType && item.id != null) {
+      return String(item.id);
+    }
+  }
+
+  return null;
+}
+
+export async function resolveAniListIdByKitsuIdClient(
+  mediaType: KitsuMediaType,
+  kitsuId: string,
+): Promise<number | null> {
+  const payload =
+    mediaType === "anime"
+      ? await getAnimeResolvePayloadBySlug(kitsuId)
+      : await getMangaResolvePayloadBySlug(kitsuId);
+  return payload?.anilistId ?? null;
+}
+
 function mappingId(
   mappings:
     | Array<{
@@ -243,8 +312,8 @@ export async function getMangaSeriesDetailBySlug(
   kitsuId: string,
 ): Promise<KitsuMangaSeriesDetail | null> {
   const result = await kitsuBrowserClient("query")({
-    findMangaBySlug: [
-      { slug: kitsuId },
+    findMangaById: [
+      { id: kitsuId },
       {
         id: true,
         titles: { canonical: true, romanized: true },
@@ -257,7 +326,7 @@ export async function getMangaSeriesDetailBySlug(
     ],
   });
 
-  const manga = result.findMangaBySlug;
+  const manga = result.findMangaById;
   if (!manga) return null;
 
   const totalChapters = manga.chapterCount ?? manga.chapterCountGuess ?? null;

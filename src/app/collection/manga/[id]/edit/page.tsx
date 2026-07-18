@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { MangaCollectionItemForm } from "@/components/MangaCollectionItemForm";
 import prisma from "@/lib/prisma";
+import { requireSession } from "@/lib/session";
 
 export const metadata: Metadata = {
   title: "Edit Collection Item – Tsuki Client",
@@ -11,6 +12,7 @@ export const metadata: Metadata = {
 type Props = { params: Promise<{ id: string }> };
 
 export default async function EditMangaCollectionItemPage({ params }: Props) {
+  await requireSession();
   const { id } = await params;
   const item = await prisma.mangaCollectionItem.findUnique({
     where: { id },

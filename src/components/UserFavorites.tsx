@@ -58,7 +58,7 @@ function FavoriteCard({ item }: { item: KitsuFavoriteItem }) {
             src={item.imageUrl}
             alt={item.name}
             fill
-            sizes="110px"
+            sizes="(max-width: 899px) 45vw, 110px"
             style={{ objectFit: "cover" }}
             unoptimized
           />
@@ -123,18 +123,31 @@ export default function UserFavorites({
   );
 
   return (
-    <Box>
+    <Box sx={{ width: "100%", minWidth: 0 }}>
       <Tabs
         value={activeTab}
         onChange={(_, v) => setActiveTab(v as KitsuFavoriteItem["type"])}
-        sx={{ mb: 2 }}
+        sx={{
+          mb: 2,
+          minHeight: { xs: 42, sm: 48 },
+          "& .MuiTabs-list": {
+            gap: { xs: 0.25, sm: 1 },
+            justifyContent: { xs: "space-around", md: "flex-start" },
+          },
+        }}
       >
         {types.map((t) => (
           <Tab
             key={t}
             value={t}
             label={`${TYPE_LABELS[t]} (${favorites[t].length})`}
-            sx={{ textTransform: "none" }}
+            sx={{
+              minWidth: 0,
+              px: { xs: 0.75, sm: 2 },
+              fontSize: { xs: "0.875rem", sm: "0.9rem" },
+              textTransform: "none",
+              whiteSpace: "nowrap",
+            }}
           />
         ))}
       </Tabs>
@@ -143,12 +156,12 @@ export default function UserFavorites({
         sx={{
           display: "grid",
           gridTemplateColumns: {
-            xs: "repeat(2, 1fr)",
-            sm: "repeat(3, 1fr)",
+            xs: "repeat(auto-fit, minmax(min(100%, 120px), 1fr))",
+            sm: "repeat(auto-fit, minmax(110px, 1fr))",
             md: "repeat(auto-fill, 110px)",
           },
           gap: 2,
-          justifyContent: { xs: "space-between", md: "flex-start" },
+          justifyContent: "flex-start",
         }}
       >
         {sorted.map((item) => (

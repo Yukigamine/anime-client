@@ -19,7 +19,7 @@ import {
 } from "@mui/material";
 import { useRouter } from "next/navigation";
 import { enqueueSnackbar } from "notistack";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { AnimeListEntry, WatchStatus } from "@/generated/prisma/client";
 import { removeAnimeListEntry, upsertAnimeListEntry } from "@/lib/actions/list";
 import ConfirmButton from "./ConfirmButton";
@@ -75,6 +75,16 @@ export default function AnimeListEntryEditModal({
   const [rewatchCount, setRewatchCount] = useState(entry?.rewatchCount ?? 0);
   const [rewatching, setRewatching] = useState(entry?.rewatching ?? false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) return;
+    setWatchStatus(entry?.watchStatus ?? "PLAN_TO_WATCH");
+    setProgress(entry?.progress ?? 0);
+    setRating(entry?.rating != null ? entry.rating / 2 : 0);
+    setNotes(entry?.notes ?? "");
+    setRewatchCount(entry?.rewatchCount ?? 0);
+    setRewatching(entry?.rewatching ?? false);
+  }, [entry, open]);
 
   const canDelete = entry != null;
 

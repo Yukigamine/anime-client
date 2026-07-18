@@ -24,17 +24,19 @@ import type {
   MangaCollectionItem,
   MangaListEntry,
 } from "@/generated/prisma/client";
+import type { MediaDetailSnapshot } from "@/lib/media-detail-types";
 import {
   formatHalfStepRatingOutOfTen,
   normalizeListRatingToTen,
 } from "@/lib/media-display";
 
 type Props = {
-  kitsuId: string;
+  kitsuId: string | null;
   fallbackTitle: string;
   mediaType: "anime" | "manga";
   mediaId: string | null;
   anilistId: number | null;
+  initialDetail: MediaDetailSnapshot | null;
   listEntry: AnimeListEntry | MangaListEntry | null;
   collectionCount: number;
   collectionFormats?: string[];
@@ -50,7 +52,10 @@ const FORMAT_LABELS: Record<string, string> = {
   OTHER: "Other",
 };
 
-function mangaStatusLabel(status: MangaListEntry["readStatus"]): string {
+function mangaStatusLabel(
+  status: MangaListEntry["readStatus"],
+  rereading: boolean,
+): ReactNode {
   const labels: Record<MangaListEntry["readStatus"], string> = {
     PLAN_TO_READ: "Want to Read",
     READING: "Reading",
@@ -58,10 +63,19 @@ function mangaStatusLabel(status: MangaListEntry["readStatus"]): string {
     ON_HOLD: "On Hold",
     DROPPED: "Dropped",
   };
-  return labels[status];
+  return status === "READING" && rereading ? (
+    <>
+      Reading <ReplayIcon fontSize="small" sx={{ verticalAlign: "middle" }} />
+    </>
+  ) : (
+    labels[status]
+  );
 }
 
-function animeStatusLabel(status: AnimeListEntry["watchStatus"]): string {
+function animeStatusLabel(
+  status: AnimeListEntry["watchStatus"],
+  rewatching: boolean,
+): ReactNode {
   const labels: Record<AnimeListEntry["watchStatus"], string> = {
     WATCHING: "Watching",
     PLAN_TO_WATCH: "Want to Watch",
@@ -69,7 +83,13 @@ function animeStatusLabel(status: AnimeListEntry["watchStatus"]): string {
     ON_HOLD: "On Hold",
     DROPPED: "Dropped",
   };
-  return labels[status];
+  return status === "WATCHING" && rewatching ? (
+    <>
+      Watching <ReplayIcon fontSize="small" sx={{ verticalAlign: "middle" }} />
+    </>
+  ) : (
+    labels[status]
+  );
 }
 
 function ListDetailRow({
@@ -101,6 +121,7 @@ export default function ProviderMediaDetailPage({
   mediaType,
   mediaId,
   anilistId,
+  initialDetail,
   listEntry,
   collectionCount,
   collectionFormats = [],
@@ -111,7 +132,11 @@ export default function ProviderMediaDetailPage({
   const mangaEntry =
     mediaType === "manga" ? (listEntry as MangaListEntry | null) : null;
   const title = fallbackTitle.replaceAll("-", " ");
-  const [mediaCount, setMediaCount] = useState<number | null>(null);
+  const [mediaCount, setMediaCount] = useState<number | null>(
+    mediaType === "anime"
+      ? (initialDetail?.episodeCount ?? null)
+      : (initialDetail?.chapterCount ?? null),
+  );
   const animeCollectionItems =
     mediaType === "anime" ? (collectionItems as AnimeCollectionItem[]) : [];
   const mangaCollectionItems =
@@ -123,7 +148,7 @@ export default function ProviderMediaDetailPage({
           .join(", ")
       : collectionCount > 0
         ? `In collection (${collectionCount})`
-        : "Not in collection";
+        : null;
 
   return (
     <MediaDetailLayout
@@ -136,23 +161,29 @@ export default function ProviderMediaDetailPage({
           kitsuId={kitsuId}
           mediaType={mediaType}
           fallbackTitle={title}
+          initialDetail={initialDetail}
+          anilistId={anilistId}
           onCountLoaded={setMediaCount}
           extraChips={
             <>
-              <Chip
-                label={collectionLabel}
-                size="small"
-                color={collectionCount > 0 ? "success" : "default"}
-              />
+              {collectionLabel && (
+                <Chip label={collectionLabel} size="small" color="success" />
+              )}
               {listEntry && (
                 <Chip
                   label={
                     mediaType === "anime"
                       ? animeEntry
-                        ? animeStatusLabel(animeEntry.watchStatus)
+                        ? animeStatusLabel(
+                            animeEntry.watchStatus,
+                            animeEntry.rewatching,
+                          )
                         : "Not on list"
                       : mangaEntry
-                        ? mangaStatusLabel(mangaEntry.readStatus)
+                        ? mangaStatusLabel(
+                            mangaEntry.readStatus,
+                            mangaEntry.rereading,
+                          )
                         : "Not on list"
                   }
                   size="small"
@@ -164,17 +195,15 @@ export default function ProviderMediaDetailPage({
         />
       }
       heroChips={
-        <Chip
-          label={collectionLabel}
-          size="small"
-          color={collectionCount > 0 ? "success" : "default"}
-        />
+        collectionLabel ? (
+          <Chip label={collectionLabel} size="small" color="success" />
+        ) : null
       }
       quickActions={
         mediaType === "anime" ? (
           <AnimeDetailActions
             animeId={mediaId}
-            kitsuId={kitsuId}
+            kitsuId={kitsuId ?? ""}
             title={title}
             episodeCount={mediaCount}
             entry={animeEntry}
@@ -182,10 +211,10 @@ export default function ProviderMediaDetailPage({
         ) : (
           <MangaDetailActions
             mangaId={mediaId}
-            kitsuId={kitsuId}
+            kitsuId={kitsuId ?? ""}
             title={title}
-            chapterCount={null}
-            volumeCount={null}
+            chapterCount={mediaCount}
+            volumeCount={initialDetail?.volumeCount ?? null}
             entry={mangaEntry}
           />
         )
@@ -199,10 +228,16 @@ export default function ProviderMediaDetailPage({
               Status:{" "}
               {mediaType === "anime"
                 ? animeEntry
-                  ? animeStatusLabel(animeEntry.watchStatus)
+                  ? animeStatusLabel(
+                      animeEntry.watchStatus,
+                      animeEntry.rewatching,
+                    )
                   : "Not on list"
                 : mangaEntry
-                  ? mangaStatusLabel(mangaEntry.readStatus)
+                  ? mangaStatusLabel(
+                      mangaEntry.readStatus,
+                      mangaEntry.rereading,
+                    )
                   : "Not on list"}
             </ListDetailRow>
             <ListDetailRow
@@ -242,7 +277,6 @@ export default function ProviderMediaDetailPage({
                   icon={<ReplayIcon fontSize="small" color="action" />}
                 >
                   Rewatches: {animeEntry.rewatchCount}
-                  {animeEntry.rewatching ? " (rewatching)" : ""}
                 </ListDetailRow>
                 {animeEntry.notes && (
                   <ListDetailRow
@@ -409,13 +443,16 @@ export default function ProviderMediaDetailPage({
         ) : undefined
       }
       sidebarExtra={
-        <RelatedMediaCards kitsuId={kitsuId} mediaType={mediaType} />
+        kitsuId ? (
+          <RelatedMediaCards kitsuId={kitsuId} mediaType={mediaType} />
+        ) : undefined
       }
       seriesDetails={
         <ProviderSeriesDetails
           kitsuId={kitsuId}
           mediaType={mediaType}
           anilistId={anilistId}
+          initialDetail={initialDetail}
         />
       }
     />

@@ -39,6 +39,7 @@ import type {
   InvalidEntriesResult,
   SyncStatusPayload,
 } from "@/lib/actions/sync";
+import { repairMissingKitsuMappings } from "@/lib/kitsu/client-mapping-repair";
 
 const PROVIDER_LABELS = { KITSU: "Kitsu", ANILIST: "AniList" } as const;
 
@@ -102,6 +103,40 @@ export default function SyncDashboard() {
       if (!result.ok) {
         enqueueSnackbar(result.error, { variant: "error" });
         return;
+      }
+
+      if (provider === "ANILIST" && direction === "PULL") {
+        try {
+          const repair = await repairMissingKitsuMappings();
+          const repairedKitsu = repair.repairedAnime + repair.repairedManga;
+          const repairedAniList =
+            repair.repairedAniListAnime + repair.repairedAniListManga;
+          if (repairedKitsu > 0 || repairedAniList > 0) {
+            enqueueSnackbar(
+              `Repaired ${repairedKitsu} Kitsu and ${repairedAniList} AniList media ID${repairedKitsu + repairedAniList === 1 ? "" : "s"}`,
+              { variant: "info" },
+            );
+          }
+          if (repair.unresolved.length > 0) {
+            enqueueSnackbar(
+              `${repair.unresolved.length} item${repair.unresolved.length === 1 ? "" : "s"} could not be fully mapped`,
+              { variant: "warning" },
+            );
+          }
+          if (repair.unavailableAniListMappings.length > 0) {
+            enqueueSnackbar(
+              `${repair.unavailableAniListMappings.length} item${repair.unavailableAniListMappings.length === 1 ? "" : "s"} do not have an AniList mapping`,
+              { variant: "info" },
+            );
+          }
+        } catch (error) {
+          enqueueSnackbar(
+            error instanceof Error
+              ? error.message
+              : "Unable to repair Kitsu media mappings",
+            { variant: "warning" },
+          );
+        }
       }
 
       const refreshed = await getSyncStatusAction();

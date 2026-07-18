@@ -138,11 +138,7 @@ export default function AnimeListClient({
         <Tabs
           value={activeTab}
           onChange={(_, v) => {
-            if (search) {
-              startTransition(() => setActiveTab(v as StatusTab));
-            } else {
-              setActiveTab(v as StatusTab);
-            }
+            startTransition(() => setActiveTab(v as StatusTab));
           }}
           variant="scrollable"
           scrollButtons="auto"

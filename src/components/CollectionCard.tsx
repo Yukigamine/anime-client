@@ -33,6 +33,11 @@ export function CollectionCard({
         display: "flex",
         flexDirection: "column",
         position: "relative",
+        "&:hover .collection-edit-action, &:focus-within .collection-edit-action":
+          {
+            opacity: 1,
+            pointerEvents: "auto",
+          },
       }}
     >
       <AppLink href={href} aria-label={`View ${title}`}>
@@ -47,19 +52,10 @@ export function CollectionCard({
         />
       </AppLink>
       <CardContent sx={{ flexGrow: 1, pb: 1 }}>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: 1,
-            mb: 1,
-          }}
-        >
+        <Box sx={{ mb: 1 }}>
           <AppLink
             href={href}
             sx={{
-              flex: 1,
               minWidth: 0,
               color: "inherit",
               textDecoration: "none",
@@ -79,7 +75,9 @@ export function CollectionCard({
               {title}
             </Typography>
           </AppLink>
-          <Box sx={{ flexShrink: 0 }}>{actions}</Box>
+        </Box>
+        <Box sx={{ position: "absolute", right: 4, bottom: 4, zIndex: 1 }}>
+          {actions}
         </Box>
         <Box
           sx={{

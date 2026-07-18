@@ -13,6 +13,7 @@ import {
   startKitsuSyncLogAction,
   syncKitsuLibraryAction,
 } from "@/lib/actions/kitsu-sync";
+import { repairMissingKitsuMappings } from "@/lib/kitsu/client-mapping-repair";
 import { assertNoCloudflareChallenge, kitsuFetch } from "@/lib/kitsu/fetch";
 import type {
   KitsuLibraryEntry,
@@ -660,6 +661,12 @@ export default function KitsuSyncButton({
     try {
       const accessToken = tokenResult.data;
       const slug = await getCurrentProfileSlug(accessToken);
+      const mappingRepair = await repairMissingKitsuMappings();
+      errors.push(
+        ...mappingRepair.unresolved.map(
+          (item) => `${item}: provider mapping could not be resolved`,
+        ),
+      );
       const snapshotResult = await getKitsuPushSnapshotAction();
 
       if (!snapshotResult.ok || !snapshotResult.data) {

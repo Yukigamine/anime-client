@@ -241,8 +241,6 @@ export function CollectionViewWrapper<T extends Item>({
                     <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
                       {isAuthenticated && (
                         <CollectionItemActions
-                          id={item.id}
-                          type={type}
                           title={title}
                           editHref={`/collection/${type}/${item.id}/edit`}
                         />

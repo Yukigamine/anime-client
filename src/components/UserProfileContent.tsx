@@ -20,7 +20,7 @@ import UserFavorites from "@/components/UserFavorites";
 import { useKitsuProfile } from "@/lib/hooks/useKitsuProfile";
 import {
   ageFromBirthday,
-  daysAgo,
+  formatElapsedSince,
   formatProfileDate,
   formatWatchTime,
 } from "@/lib/kitsu/user-types";
@@ -39,7 +39,7 @@ function DetailRow({
           fontWeight: 600,
           color: "text.secondary",
           whiteSpace: "nowrap",
-          width: 140,
+          width: 110,
           borderBottom: "none",
           py: 0.75,
           pl: 0,
@@ -47,7 +47,16 @@ function DetailRow({
       >
         {label}
       </TableCell>
-      <TableCell sx={{ borderBottom: "none", py: 0.75 }}>{children}</TableCell>
+      <TableCell
+        sx={{
+          borderBottom: "none",
+          py: 0.75,
+          pr: 0,
+          textAlign: "right",
+        }}
+      >
+        {children}
+      </TableCell>
     </TableRow>
   );
 }
@@ -93,7 +102,8 @@ export default function UserProfileContent({ username }: { username: string }) {
     );
   }
 
-  const joinFormatted = `${formatProfileDate(profile.createdAt)} (${daysAgo(profile.createdAt).toLocaleString()} days ago)`;
+  const joinedDate = formatProfileDate(profile.createdAt);
+  const joinedElapsed = formatElapsedSince(profile.createdAt);
   const birthdayFormatted = profile.birthday
     ? `${formatProfileDate(profile.birthday)} (age ${ageFromBirthday(profile.birthday)})`
     : null;
@@ -205,9 +215,14 @@ export default function UserProfileContent({ username }: { username: string }) {
             </Paper>
 
             <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-              <Table size="small">
+              <Table size="small" sx={{ tableLayout: "fixed", width: "100%" }}>
                 <TableBody>
-                  <DetailRow label="Joined">{joinFormatted}</DetailRow>
+                  <DetailRow label="Joined">
+                    <Box sx={{ display: "flex", flexDirection: "column" }}>
+                      <span>{joinedDate}</span>
+                      <span>({joinedElapsed} ago)</span>
+                    </Box>
+                  </DetailRow>
                   {birthdayFormatted && (
                     <DetailRow label="Birthday">{birthdayFormatted}</DetailRow>
                   )}
@@ -225,7 +240,7 @@ export default function UserProfileContent({ username }: { username: string }) {
                         rel="noopener noreferrer"
                         underline="hover"
                         variant="body2"
-                        sx={{ wordBreak: "break-all" }}
+                        sx={{ whiteSpace: "nowrap" }}
                       >
                         {profile.website}
                       </Link>
@@ -234,7 +249,12 @@ export default function UserProfileContent({ username }: { username: string }) {
                   {profile.waifu && (
                     <DetailRow label={profile.waifu.label}>
                       <Box
-                        sx={{ display: "flex", alignItems: "center", gap: 1 }}
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "flex-end",
+                          gap: 1,
+                        }}
                       >
                         {profile.waifu.imageUrl && (
                           <Box
@@ -278,7 +298,10 @@ export default function UserProfileContent({ username }: { username: string }) {
                 <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1 }}>
                   User Stats
                 </Typography>
-                <Table size="small">
+                <Table
+                  size="small"
+                  sx={{ tableLayout: "fixed", width: "100%" }}
+                >
                   <TableBody>
                     {profile.stats.animeTimeSecs != null && (
                       <DetailRow label="Time watching">
@@ -311,7 +334,13 @@ export default function UserProfileContent({ username }: { username: string }) {
             )}
           </Box>
 
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Box
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              width: { xs: "100%", md: "auto" },
+            }}
+          >
             {hasFavorites ? (
               <>
                 <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>

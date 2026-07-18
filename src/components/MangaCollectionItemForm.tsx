@@ -19,6 +19,7 @@ import {
 } from "@mui/material";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { CollectionDeleteButton } from "@/components/CollectionDeleteButton";
 import { ItemLookupField } from "@/components/ItemLookupField";
 import type {
   CollectionCondition,
@@ -504,25 +505,42 @@ export function MangaCollectionItemForm({
           onChange={(e) => setNotes(e.target.value)}
         />
 
-        <Box sx={{ display: "flex", gap: 2, justifyContent: "flex-end" }}>
-          <Button
-            variant="outlined"
-            onClick={() => router.back()}
-            disabled={submitting}
-          >
-            Cancel
-          </Button>
-          <Button
-            type="submit"
-            variant="contained"
-            disabled={submitting || !canSubmit}
-          >
-            {submitting
-              ? "Saving…"
-              : isEdit
-                ? "Save changes"
-                : "Add to collection"}
-          </Button>
+        <Box
+          sx={{
+            display: "flex",
+            gap: 2,
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          {isEdit && initialData && (
+            <CollectionDeleteButton
+              id={initialData.id}
+              type="manga"
+              title={selectedManga?.titleEn ?? "this item"}
+              disabled={submitting}
+            />
+          )}
+          <Box sx={{ display: "flex", gap: 2, ml: "auto" }}>
+            <Button
+              variant="outlined"
+              onClick={() => router.back()}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={submitting || !canSubmit}
+            >
+              {submitting
+                ? "Saving…"
+                : isEdit
+                  ? "Save changes"
+                  : "Add to collection"}
+            </Button>
+          </Box>
         </Box>
       </Stack>
     </Box>

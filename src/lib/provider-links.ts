@@ -118,10 +118,9 @@ export async function deleteToken(
   });
 }
 
-export async function getAuthStatus(): Promise<
-  Record<Provider, { loggedIn: boolean; username: string | null }>
-> {
-  const userId = await resolveLinkedUserId();
+export async function getAuthStatus(
+  userId: string,
+): Promise<Record<Provider, { loggedIn: boolean; username: string | null }>> {
   const [kitsu, anilist] = await Promise.all([
     prisma.account.findFirst({
       where: { userId, providerId: LINK_PROVIDER_IDS.KITSU },

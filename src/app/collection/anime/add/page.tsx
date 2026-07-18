@@ -1,12 +1,14 @@
 import { Box, Container, Typography } from "@mui/material";
 import type { Metadata } from "next";
 import { AnimeCollectionItemForm } from "@/components/AnimeCollectionItemForm";
+import { requireSession } from "@/lib/session";
 
 export const metadata: Metadata = {
   title: "Add to Anime Collection – Tsuki Client",
 };
 
-export default function AddAnimeCollectionItemPage() {
+export default async function AddAnimeCollectionItemPage() {
+  await requireSession();
   return (
     <Container maxWidth="sm" sx={{ py: 4 }}>
       <Box sx={{ mb: 4 }}>

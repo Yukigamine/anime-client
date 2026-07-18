@@ -36,7 +36,7 @@ export default function MediaDetailLayout({
   seriesDetails,
 }: Props) {
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ py: 4, minWidth: 0, overflowX: "hidden" }}>
       <Paper sx={{ overflow: "hidden", borderRadius: 3, mb: 3 }}>
         <Box
           sx={{
@@ -120,7 +120,7 @@ export default function MediaDetailLayout({
           gridTemplateColumns: { xs: "1fr", md: "320px minmax(0, 1fr)" },
           gap: 3,
           alignItems: { xs: "start", md: "start" },
-          overflow: "visible",
+          minWidth: 0,
         }}
       >
         <Box
@@ -128,13 +128,14 @@ export default function MediaDetailLayout({
             width: "100%",
             alignSelf: "start",
             height: { md: "100%" },
-            overflow: "visible",
+            minWidth: 0,
           }}
         >
           <Stack
             spacing={2.5}
             sx={{
               width: "100%",
+              minWidth: 0,
               position: { xs: "static", md: "sticky" },
               top: { md: 92 },
               alignSelf: "start",
@@ -174,7 +175,17 @@ export default function MediaDetailLayout({
           </Stack>
         </Box>
 
-        <Paper sx={{ p: 2.5, flex: 1, minWidth: 0 }}>{seriesDetails}</Paper>
+        <Paper
+          sx={{
+            p: 2.5,
+            flex: 1,
+            minWidth: 0,
+            maxWidth: "100%",
+            overflow: "hidden",
+          }}
+        >
+          {seriesDetails}
+        </Paper>
       </Box>
     </Container>
   );

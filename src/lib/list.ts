@@ -4,8 +4,6 @@ import type {
   AnimeListEntry,
   Manga,
   MangaListEntry,
-  ReadStatus,
-  WatchStatus,
 } from "@/generated/prisma/client";
 import prisma from "./prisma";
 import {
@@ -18,77 +16,63 @@ import {
 
 export type AnimeWithEntry = Anime & { listEntry: AnimeListEntry | null };
 export type MangaWithEntry = Manga & { listEntry: MangaListEntry | null };
+export type AnimeListSnapshot = {
+  items: AnimeWithEntry[];
+  counts: Record<string, number>;
+};
+export type MangaListSnapshot = {
+  items: MangaWithEntry[];
+  counts: Record<string, number>;
+};
 
-export async function getAnimeList(
-  status?: WatchStatus,
-): Promise<AnimeWithEntry[]> {
-  const cacheKey = `${ANIME_LIST_KEY}:${status ?? "all"}`;
-  const cached = await getCached<AnimeWithEntry[]>(cacheKey);
+export async function getAnimeListSnapshot(): Promise<AnimeListSnapshot> {
+  const cacheKey = `${ANIME_LIST_KEY}:all`;
+  const cached = await getCached<AnimeListSnapshot>(cacheKey);
   if (cached) return cached;
 
-  const entries = await prisma.anime.findMany({
-    where: status
-      ? { listEntry: { watchStatus: status } }
-      : { listEntry: { isNot: null } },
-    include: { listEntry: true },
-    orderBy: [{ titleEn: "asc" }],
-  });
-
-  await setCached(cacheKey, entries, LIST_TTL);
-  return entries;
-}
-
-export async function getAnimeListCounts(): Promise<Record<string, number>> {
-  const cacheKey = `${ANIME_LIST_KEY}:counts`;
-  const cached = await getCached<Record<string, number>>(cacheKey);
-  if (cached) return cached;
-
-  const groups = await prisma.animeListEntry.groupBy({
-    by: ["watchStatus"],
-    _count: { watchStatus: true },
-  });
+  const [items, groups] = await Promise.all([
+    prisma.anime.findMany({
+      where: { listEntry: { isNot: null } },
+      include: { listEntry: true },
+      orderBy: [{ titleEn: "asc" }],
+    }),
+    prisma.animeListEntry.groupBy({
+      by: ["watchStatus"],
+      _count: { watchStatus: true },
+    }),
+  ]);
 
   const total = groups.reduce((s, g) => s + g._count.watchStatus, 0);
   const counts: Record<string, number> = { ALL: total };
   for (const g of groups) counts[g.watchStatus] = g._count.watchStatus;
 
-  await setCached(cacheKey, counts, LIST_TTL);
-  return counts;
+  const snapshot = { items, counts };
+  await setCached(cacheKey, snapshot, LIST_TTL);
+  return snapshot;
 }
 
-export async function getMangaList(
-  status?: ReadStatus,
-): Promise<MangaWithEntry[]> {
-  const cacheKey = `${MANGA_LIST_KEY}:${status ?? "all"}`;
-  const cached = await getCached<MangaWithEntry[]>(cacheKey);
+export async function getMangaListSnapshot(): Promise<MangaListSnapshot> {
+  const cacheKey = `${MANGA_LIST_KEY}:all`;
+  const cached = await getCached<MangaListSnapshot>(cacheKey);
   if (cached) return cached;
 
-  const entries = await prisma.manga.findMany({
-    where: status
-      ? { listEntry: { readStatus: status } }
-      : { listEntry: { isNot: null } },
-    include: { listEntry: true },
-    orderBy: [{ titleEn: "asc" }],
-  });
-
-  await setCached(cacheKey, entries, LIST_TTL);
-  return entries;
-}
-
-export async function getMangaListCounts(): Promise<Record<string, number>> {
-  const cacheKey = `${MANGA_LIST_KEY}:counts`;
-  const cached = await getCached<Record<string, number>>(cacheKey);
-  if (cached) return cached;
-
-  const groups = await prisma.mangaListEntry.groupBy({
-    by: ["readStatus"],
-    _count: { readStatus: true },
-  });
+  const [items, groups] = await Promise.all([
+    prisma.manga.findMany({
+      where: { listEntry: { isNot: null } },
+      include: { listEntry: true },
+      orderBy: [{ titleEn: "asc" }],
+    }),
+    prisma.mangaListEntry.groupBy({
+      by: ["readStatus"],
+      _count: { readStatus: true },
+    }),
+  ]);
 
   const total = groups.reduce((s, g) => s + g._count.readStatus, 0);
   const counts: Record<string, number> = { ALL: total };
   for (const g of groups) counts[g.readStatus] = g._count.readStatus;
 
-  await setCached(cacheKey, counts, LIST_TTL);
-  return counts;
+  const snapshot = { items, counts };
+  await setCached(cacheKey, snapshot, LIST_TTL);
+  return snapshot;
 }

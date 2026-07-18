@@ -23,11 +23,14 @@ import {
   SocialIconKey,
 } from "@/lib/enums/detail-page";
 import { kitsuBrowserClient } from "@/lib/kitsu/browser-client";
+import type { MediaDetailSnapshot } from "@/lib/media-detail-types";
+import { anilistFuzzyDate, cleanString } from "@/lib/media-values";
 
 type Props = {
-  kitsuId: string;
+  kitsuId: string | null;
   mediaType: "anime" | "manga";
   anilistId: number | null;
+  initialDetail: MediaDetailSnapshot | null;
 };
 
 type Detail = {
@@ -44,12 +47,6 @@ type Detail = {
   rating: number | null;
   trailer: { site: string | null; id: string | null } | null;
 };
-
-function cleanString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const result = value.trim();
-  return result.length > 0 ? result : null;
-}
 
 function descriptionText(value: unknown): string | null {
   if (typeof value === "string") return cleanString(value);
@@ -86,15 +83,142 @@ function deduplicateExternalLinks(links: Array<{ site: string; url: string }>) {
   });
 }
 
+function detailFromSnapshot(
+  snapshot: MediaDetailSnapshot | null,
+): Detail | null {
+  if (!snapshot) return null;
+  return {
+    synopsis: snapshot.synopsis,
+    startDate: snapshot.startDate,
+    endDate: snapshot.endDate,
+    productions: [],
+    externalLinks: [],
+    episodeCount: snapshot.episodeCount,
+    chapterCount: snapshot.chapterCount,
+    volumeCount: snapshot.volumeCount,
+    genres: [],
+    studios: [],
+    rating: snapshot.averageRating == null ? null : snapshot.averageRating / 10,
+    trailer: null,
+  };
+}
+
 export default function ProviderSeriesDetails({
   kitsuId,
   mediaType,
   anilistId,
+  initialDetail,
 }: Props) {
-  const [detail, setDetail] = useState<Detail | null>(null);
+  const [detail, setDetail] = useState<Detail | null>(() =>
+    detailFromSnapshot(initialDetail),
+  );
 
   useEffect(() => {
+    setDetail(detailFromSnapshot(initialDetail));
+
     let cancelled = false;
+
+    async function loadAniListFallback() {
+      if (anilistId == null) return;
+      try {
+        const response = await fetch("https://graphql.anilist.co", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            query: `query ($id: Int!, $type: MediaType!) { Media(id: $id, type: $type) { description(asHtml: false) startDate { year month day } endDate { year month day } episodes chapters volumes averageScore genres studios { nodes { name } } externalLinks { site url } trailer { site id } } }`,
+            variables: {
+              id: anilistId,
+              type: mediaType === "anime" ? "ANIME" : "MANGA",
+            },
+          }),
+        });
+        const payload = (await response.json()) as {
+          data?: {
+            Media?: {
+              description?: unknown;
+              startDate?: { year?: unknown; month?: unknown; day?: unknown };
+              endDate?: { year?: unknown; month?: unknown; day?: unknown };
+              episodes?: unknown;
+              chapters?: unknown;
+              volumes?: unknown;
+              averageScore?: unknown;
+              genres?: unknown;
+              studios?: { nodes?: Array<{ name?: unknown }> } | null;
+              externalLinks?: Array<{ site?: unknown; url?: unknown }> | null;
+              trailer?: { site?: unknown; id?: unknown } | null;
+            };
+          };
+        };
+        const media = payload.data?.Media;
+        if (!media || cancelled) return;
+        const local = detailFromSnapshot(initialDetail);
+        const genres = Array.isArray(media.genres)
+          ? media.genres.flatMap((genre) => {
+              const value = cleanString(genre);
+              return value ? [value] : [];
+            })
+          : [];
+        const externalLinks =
+          media.externalLinks?.flatMap((link) => {
+            const url = cleanString(link.url);
+            return url
+              ? [{ site: cleanString(link.site) ?? "Website", url }]
+              : [];
+          }) ?? [];
+        setDetail({
+          synopsis:
+            descriptionText(media.description) ?? local?.synopsis ?? null,
+          startDate:
+            anilistFuzzyDate(media.startDate) ?? local?.startDate ?? null,
+          endDate: anilistFuzzyDate(media.endDate) ?? local?.endDate ?? null,
+          productions: local?.productions ?? [],
+          externalLinks: deduplicateExternalLinks(externalLinks),
+          episodeCount:
+            typeof media.episodes === "number"
+              ? media.episodes
+              : (local?.episodeCount ?? null),
+          chapterCount:
+            typeof media.chapters === "number"
+              ? media.chapters
+              : (local?.chapterCount ?? null),
+          volumeCount:
+            typeof media.volumes === "number"
+              ? media.volumes
+              : (local?.volumeCount ?? null),
+          genres,
+          studios:
+            media.studios?.nodes?.flatMap((studio) => {
+              const value = cleanString(studio.name);
+              return value ? [value] : [];
+            }) ?? [],
+          rating:
+            typeof media.averageScore === "number"
+              ? media.averageScore / 10
+              : (local?.rating ?? null),
+          trailer: media.trailer?.id
+            ? {
+                site: cleanString(media.trailer.site),
+                id: cleanString(media.trailer.id),
+              }
+            : null,
+        });
+      } catch (error) {
+        console.error(
+          "[provider-details] AniList browser request failed",
+          error,
+        );
+      }
+    }
+
+    if (!kitsuId) {
+      void loadAniListFallback();
+      return () => {
+        cancelled = true;
+      };
+    }
 
     async function load() {
       try {
@@ -171,7 +295,11 @@ export default function ProviderSeriesDetails({
             }
           | null
           | undefined;
-        if (!media || cancelled) return;
+        if (!media) {
+          await loadAniListFallback();
+          return;
+        }
+        if (cancelled) return;
 
         const anilist =
           anilistId == null
@@ -268,6 +396,7 @@ export default function ProviderSeriesDetails({
         });
       } catch (error) {
         console.error("[provider-details] browser request failed", error);
+        await loadAniListFallback();
       }
     }
 
@@ -275,7 +404,16 @@ export default function ProviderSeriesDetails({
     return () => {
       cancelled = true;
     };
-  }, [anilistId, kitsuId, mediaType]);
+  }, [anilistId, initialDetail, kitsuId, mediaType]);
+
+  if (!detail && !kitsuId && !anilistId) {
+    return (
+      <Typography color="text.secondary">
+        Details are unavailable until this title can be matched to Kitsu or
+        AniList.
+      </Typography>
+    );
+  }
 
   if (!detail) return null;
   const trailerUrl = detail.trailer?.id
@@ -285,7 +423,7 @@ export default function ProviderSeriesDetails({
     : null;
 
   return (
-    <Stack spacing={2}>
+    <Stack spacing={2} sx={{ minWidth: 0, maxWidth: "100%" }}>
       {(detail.genres.length > 0 || detail.externalLinks.length > 0) && (
         <Stack
           direction="row"
@@ -371,6 +509,8 @@ export default function ProviderSeriesDetails({
             sx={{
               position: "relative",
               width: "100%",
+              maxWidth: "100%",
+              minWidth: 0,
               aspectRatio: "16 / 9",
               bgcolor: "grey.900",
             }}

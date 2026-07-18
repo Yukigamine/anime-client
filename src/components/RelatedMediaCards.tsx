@@ -4,6 +4,8 @@ import { Box, Card, CardActionArea, Stack, Typography } from "@mui/material";
 import NextLink from "next/link";
 import { useEffect, useState } from "react";
 import { assertNoCloudflareChallenge, kitsuFetch } from "@/lib/kitsu/fetch";
+import { slugifyTitle } from "@/lib/media-routing";
+import { cleanString } from "@/lib/media-values";
 import { Thunder } from "@/lib/zeus/kitsu";
 
 const KITSU_GRAPHQL =
@@ -28,21 +30,6 @@ type RelatedMediaItem = {
   releaseYear: number | null;
   coverImageUrl: string | null;
 };
-
-function slugifyTitle(title: string): string {
-  return title
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
-function cleanString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-}
 
 function getBrowserKitsuClient() {
   return Thunder(async (query, variables) => {

@@ -115,7 +115,10 @@ function deriveAnimeNext(
     input.rewatchCount != null
       ? clampInt(input.rewatchCount)
       : (existing?.rewatchCount ?? 0);
-  const rewatching = input.rewatching ?? existing?.rewatching ?? false;
+  const rewatching =
+    watchStatus === "COMPLETED"
+      ? false
+      : (input.rewatching ?? existing?.rewatching ?? false);
 
   watchStatus = normalizeAnimeStatus(watchStatus, rewatching);
 
@@ -181,7 +184,10 @@ function deriveMangaNext(
     input.rereadCount != null
       ? clampInt(input.rereadCount)
       : (existing?.rereadCount ?? 0);
-  const rereading = input.rereading ?? existing?.rereading ?? false;
+  const rereading =
+    readStatus === "COMPLETED"
+      ? false
+      : (input.rereading ?? existing?.rereading ?? false);
 
   readStatus = normalizeMangaStatus(readStatus, rereading);
 

@@ -34,11 +34,15 @@ export default function RootLayout({
               minHeight: "100dvh",
               display: "flex",
               flexDirection: "column",
-              overflow: "visible",
+              minWidth: 0,
+              overflowX: "hidden",
             }}
           >
             <NavBar />
-            <Box component="main" sx={{ flex: 1, overflow: "visible" }}>
+            <Box
+              component="main"
+              sx={{ flex: 1, minWidth: 0, overflowX: "hidden" }}
+            >
               {children}
             </Box>
             <Footer />

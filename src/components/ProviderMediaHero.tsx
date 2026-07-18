@@ -2,13 +2,17 @@
 
 import { Box, Chip, Stack, Typography } from "@mui/material";
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { kitsuBrowserClient } from "@/lib/kitsu/browser-client";
+import type { MediaDetailSnapshot } from "@/lib/media-detail-types";
+import { anilistFuzzyDate, cleanString } from "@/lib/media-values";
 
 type Props = {
-  kitsuId: string;
+  kitsuId: string | null;
   mediaType: "anime" | "manga";
   fallbackTitle: string;
+  initialDetail: MediaDetailSnapshot | null;
+  anilistId: number | null;
   extraChips?: ReactNode;
   onCountLoaded?: (count: number | null) => void;
 };
@@ -25,10 +29,21 @@ type HeroData = {
   ageRating: string | null;
 };
 
-function cleanString(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const result = value.trim();
-  return result.length > 0 ? result : null;
+function heroFromDetail(
+  detail: MediaDetailSnapshot | null,
+  fallbackTitle: string,
+): HeroData {
+  return {
+    title: detail?.titleEn ?? detail?.titleRomaji ?? fallbackTitle,
+    secondaryTitle: detail?.titleJp ?? null,
+    bannerImageUrl: detail?.bannerImageUrl ?? null,
+    coverImageUrl: detail?.coverImageUrl ?? null,
+    startDate: detail?.startDate ?? null,
+    season: null,
+    subtype: null,
+    episodeCount: detail?.episodeCount ?? detail?.chapterCount ?? null,
+    ageRating: null,
+  };
 }
 
 function releaseLabel(
@@ -60,13 +75,90 @@ export default function ProviderMediaHero({
   kitsuId,
   mediaType,
   fallbackTitle,
+  initialDetail,
+  anilistId,
   extraChips,
   onCountLoaded,
 }: Props) {
-  const [data, setData] = useState<HeroData | null>(null);
+  const initialHero = useMemo(
+    () => heroFromDetail(initialDetail, fallbackTitle),
+    [fallbackTitle, initialDetail],
+  );
+  const [data, setData] = useState<HeroData>(initialHero);
 
   useEffect(() => {
+    setData(initialHero);
+    onCountLoaded?.(initialHero.episodeCount);
+
     let cancelled = false;
+
+    async function loadAniListFallback() {
+      if (anilistId == null) return;
+      try {
+        const response = await fetch("https://graphql.anilist.co", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            query: `query ($id: Int!, $type: MediaType!) { Media(id: $id, type: $type) { title { english romaji native } coverImage { extraLarge large } bannerImage startDate { year month day } episodes chapters } }`,
+            variables: {
+              id: anilistId,
+              type: mediaType === "anime" ? "ANIME" : "MANGA",
+            },
+          }),
+        });
+        const payload = (await response.json()) as {
+          data?: {
+            Media?: {
+              title?: { english?: unknown; romaji?: unknown; native?: unknown };
+              coverImage?: { extraLarge?: unknown; large?: unknown };
+              bannerImage?: unknown;
+              startDate?: { year?: unknown; month?: unknown; day?: unknown };
+              episodes?: unknown;
+              chapters?: unknown;
+            };
+          };
+        };
+        const media = payload.data?.Media;
+        if (!media || cancelled) return;
+        const count =
+          typeof media.episodes === "number"
+            ? media.episodes
+            : typeof media.chapters === "number"
+              ? media.chapters
+              : initialHero.episodeCount;
+        onCountLoaded?.(count);
+        setData({
+          ...initialHero,
+          title:
+            cleanString(media.title?.english) ??
+            cleanString(media.title?.romaji) ??
+            initialHero.title,
+          secondaryTitle:
+            cleanString(media.title?.native) ?? initialHero.secondaryTitle,
+          bannerImageUrl:
+            cleanString(media.bannerImage) ?? initialHero.bannerImageUrl,
+          coverImageUrl:
+            cleanString(media.coverImage?.extraLarge) ??
+            cleanString(media.coverImage?.large) ??
+            initialHero.coverImageUrl,
+          startDate: anilistFuzzyDate(media.startDate) ?? initialHero.startDate,
+          episodeCount: count,
+        });
+      } catch {
+        // The local snapshot remains the SSR fallback when AniList is unavailable.
+      }
+    }
+
+    if (!kitsuId) {
+      void loadAniListFallback();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     async function load() {
       try {
         const result =
@@ -133,6 +225,10 @@ export default function ProviderMediaHero({
             }
           | null
           | undefined;
+        if (!media) {
+          await loadAniListFallback();
+          return;
+        }
         if (cancelled) return;
         const count =
           typeof media?.episodeCount === "number"
@@ -145,30 +241,24 @@ export default function ProviderMediaHero({
           title:
             cleanString(media?.titles?.canonical) ??
             cleanString(media?.titles?.romanized) ??
-            fallbackTitle,
-          secondaryTitle: cleanString(media?.titles?.original),
-          bannerImageUrl: cleanString(media?.bannerImage?.original?.url),
-          coverImageUrl: cleanString(media?.posterImage?.original?.url),
-          startDate: cleanString(media?.startDate),
-          season: cleanString(media?.season),
-          subtype: cleanString(media?.subtype),
+            initialHero.title,
+          secondaryTitle:
+            cleanString(media.titles?.original) ?? initialHero.secondaryTitle,
+          bannerImageUrl:
+            cleanString(media.bannerImage?.original?.url) ??
+            initialHero.bannerImageUrl,
+          coverImageUrl:
+            cleanString(media.posterImage?.original?.url) ??
+            initialHero.coverImageUrl,
+          startDate: cleanString(media.startDate) ?? initialHero.startDate,
+          season: cleanString(media.season) ?? initialHero.season,
+          subtype: cleanString(media.subtype) ?? initialHero.subtype,
           episodeCount: count,
-          ageRating: cleanString(media?.ageRating),
+          ageRating: cleanString(media.ageRating) ?? initialHero.ageRating,
         });
       } catch {
         if (!cancelled) {
-          onCountLoaded?.(null);
-          setData({
-            title: fallbackTitle,
-            secondaryTitle: null,
-            bannerImageUrl: null,
-            coverImageUrl: null,
-            startDate: null,
-            season: null,
-            subtype: null,
-            episodeCount: null,
-            ageRating: null,
-          });
+          await loadAniListFallback();
         }
       }
     }
@@ -176,19 +266,9 @@ export default function ProviderMediaHero({
     return () => {
       cancelled = true;
     };
-  }, [fallbackTitle, kitsuId, mediaType, onCountLoaded]);
+  }, [anilistId, initialHero, kitsuId, mediaType, onCountLoaded]);
 
-  const hero = data ?? {
-    title: fallbackTitle,
-    secondaryTitle: null,
-    bannerImageUrl: null,
-    coverImageUrl: null,
-    startDate: null,
-    season: null,
-    subtype: null,
-    episodeCount: null,
-    ageRating: null,
-  };
+  const hero = data;
   return (
     <Box
       sx={{
@@ -209,7 +289,11 @@ export default function ProviderMediaHero({
       <Stack
         direction={{ xs: "column", sm: "row" }}
         spacing={2}
-        sx={{ alignItems: { xs: "flex-start", sm: "flex-end" } }}
+        sx={{
+          alignItems: { xs: "flex-start", sm: "flex-end" },
+          minWidth: 0,
+          maxWidth: "100%",
+        }}
       >
         <Box
           sx={{
@@ -220,6 +304,7 @@ export default function ProviderMediaHero({
             border: "1px solid rgba(255,255,255,0.2)",
             bgcolor: "grey.800",
             flexShrink: 0,
+            display: { xs: "none", sm: "block" },
           }}
         >
           {hero.coverImageUrl && (
@@ -236,7 +321,7 @@ export default function ProviderMediaHero({
             />
           )}
         </Box>
-        <Box>
+        <Box sx={{ minWidth: 0, maxWidth: "100%" }}>
           <Typography variant="h4" sx={{ fontWeight: 700 }}>
             {hero.title}
           </Typography>

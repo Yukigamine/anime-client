@@ -19,12 +19,28 @@ const RARITY_COLORS: Record<string, string> = {
   LIMITED: "#ef5350",
 };
 
+const RARITY_LABELS: Record<string, string> = {
+  STANDARD: "Standard",
+  COLLECTORS: "Collector's",
+  DELUXE: "Deluxe",
+  STEELBOOK: "Steelbook",
+  LIMITED: "Limited",
+};
+
 const FORMAT_COLORS: Record<string, string> = {
   DVD: "#795548",
   BLU_RAY: "#1976d2",
   VHS: "#f57c00",
   DIGITAL: "#00796b",
   OTHER: "#757575",
+};
+
+const FORMAT_LABELS: Record<string, string> = {
+  DVD: "DVD",
+  BLU_RAY: "Blu-ray",
+  VHS: "VHS",
+  DIGITAL: "Digital",
+  OTHER: "Other",
 };
 
 export function AnimeCollectionGrid({ items, isAuthenticated = false }: Props) {
@@ -52,16 +68,21 @@ export function AnimeCollectionGrid({ items, isAuthenticated = false }: Props) {
           actions={
             isAuthenticated ? (
               <CollectionItemActions
-                id={item.id}
-                type="anime"
                 title={item.anime.titleEn || ""}
                 editHref={`/collection/anime/${item.id}/edit`}
+                card
               />
             ) : undefined
           }
           chips={[
-            { label: item.rarity, color: RARITY_COLORS[item.rarity] },
-            { label: item.format, color: FORMAT_COLORS[item.format] },
+            {
+              label: RARITY_LABELS[item.rarity] ?? item.rarity,
+              color: RARITY_COLORS[item.rarity],
+            },
+            {
+              label: FORMAT_LABELS[item.format] ?? item.format,
+              color: FORMAT_COLORS[item.format],
+            },
           ]}
         />
       ))}

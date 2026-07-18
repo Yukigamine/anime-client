@@ -84,10 +84,9 @@ export function MangaCollectionGrid({ items, isAuthenticated = false }: Props) {
             actions={
               isAuthenticated ? (
                 <CollectionItemActions
-                  id={item.id}
-                  type="manga"
                   title={item.manga.titleEn || ""}
                   editHref={`/collection/manga/${item.id}/edit`}
+                  card
                 />
               ) : undefined
             }

@@ -3,6 +3,7 @@ import { Box, Button, Container, Stack, Typography } from "@mui/material";
 import type { Metadata } from "next";
 import { AnimeCollectionGrid } from "@/components/AnimeCollectionGrid";
 import { CollectionViewWrapper } from "@/components/CollectionViewWrapper";
+import KitsuOwnedMediaTitle from "@/components/KitsuOwnedMediaTitle";
 import AppLink from "@/components/Link";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/session";
@@ -51,31 +52,38 @@ export default async function AnimeCollectionPage() {
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box
         sx={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
           mb: 4,
         }}
       >
-        <Box>
-          <Typography variant="h4" sx={{ fontWeight: 700 }}>
-            Anime Collection
-          </Typography>
+        <KitsuOwnedMediaTitle mediaTitle="Anime Collection" />
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 2,
+          }}
+        >
           <Typography variant="body2" color="text.secondary">
             {items.length} item{items.length !== 1 ? "s" : ""}
           </Typography>
+          {isAuthenticated && (
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              component={AppLink}
+              href="/collection/anime/add"
+              sx={{
+                textTransform: "none",
+                whiteSpace: "nowrap",
+                width: "fit-content",
+                flexShrink: 0,
+              }}
+            >
+              Add
+            </Button>
+          )}
         </Box>
-        {isAuthenticated && (
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            component={AppLink}
-            href="/collection/anime/add"
-            sx={{ textTransform: "none" }}
-          >
-            Add item
-          </Button>
-        )}
       </Box>
 
       {items.length === 0 ? (

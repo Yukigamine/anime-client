@@ -1,6 +1,7 @@
 "use client";
 
 import EditIcon from "@mui/icons-material/Edit";
+import ReplayIcon from "@mui/icons-material/Replay";
 import {
   Box,
   Card,
@@ -12,6 +13,7 @@ import {
   Typography,
 } from "@mui/material";
 import Image from "next/image";
+import { memo } from "react";
 import AppLink from "@/components/Link";
 import type { MangaListEntry } from "@/generated/prisma/client";
 import type { MangaWithEntry } from "@/lib/list";
@@ -32,7 +34,7 @@ const STATUS_LABELS: Record<MangaListEntry["readStatus"], string> = {
   DROPPED: "Dropped",
 };
 
-export default function MangaCard({
+function MangaCard({
   item,
   detailHref,
   onEdit,
@@ -60,6 +62,8 @@ export default function MangaCard({
       sx={{
         display: "flex",
         height: 140,
+        contentVisibility: "auto",
+        containIntrinsicSize: "140px",
         overflow: "hidden",
         position: "relative",
         transition: "transform 0.15s, box-shadow 0.15s",
@@ -174,7 +178,22 @@ export default function MangaCard({
         >
           {entry && (
             <Chip
-              label={STATUS_LABELS[entry.readStatus]}
+              label={
+                entry.readStatus === "READING" && entry.rereading ? (
+                  <Box
+                    component="span"
+                    sx={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 0.25,
+                    }}
+                  >
+                    Reading <ReplayIcon fontSize="small" />
+                  </Box>
+                ) : (
+                  STATUS_LABELS[entry.readStatus]
+                )
+              }
               color={STATUS_COLORS[entry.readStatus]}
               size="small"
               sx={{ fontWeight: 500 }}
@@ -227,3 +246,5 @@ export default function MangaCard({
     </Card>
   );
 }
+
+export default memo(MangaCard);

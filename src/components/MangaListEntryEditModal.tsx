@@ -17,7 +17,7 @@ import {
 } from "@mui/material";
 import { useRouter } from "next/navigation";
 import { enqueueSnackbar } from "notistack";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import type { MangaListEntry, ReadStatus } from "@/generated/prisma/client";
 import { removeMangaListEntry, upsertMangaListEntry } from "@/lib/actions/list";
 import ConfirmButton from "./ConfirmButton";
@@ -79,6 +79,17 @@ export default function MangaListEntryEditModal({
   const [rereadCount, setRereadCount] = useState(entry?.rereadCount ?? 0);
   const [rereading, setRereading] = useState(entry?.rereading ?? false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (open) return;
+    setReadStatus(entry?.readStatus ?? "PLAN_TO_READ");
+    setProgress(entry?.progress ?? 0);
+    setProgressVolumes(entry?.progressVolumes ?? 0);
+    setRating(entry?.rating != null ? entry.rating / 2 : 0);
+    setNotes(entry?.notes ?? "");
+    setRereadCount(entry?.rereadCount ?? 0);
+    setRereading(entry?.rereading ?? false);
+  }, [entry, open]);
 
   const canDelete = entry != null;
 

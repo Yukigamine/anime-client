@@ -345,7 +345,7 @@ export default function NavBar() {
             <ListItemIcon>
               <VideoLibraryIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText primary="Anime" />
+            <ListItemText primary="Anime Collection" />
           </ListItemButton>
 
           <ListItemButton
@@ -358,7 +358,7 @@ export default function NavBar() {
             <ListItemIcon>
               <CollectionsBookmarkIcon fontSize="small" />
             </ListItemIcon>
-            <ListItemText primary="Manga" />
+            <ListItemText primary="Manga Collection" />
           </ListItemButton>
 
           <Divider sx={{ my: 1 }} />
