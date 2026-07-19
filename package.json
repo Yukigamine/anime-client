@@ -1,8 +1,16 @@
 {
-  "name": "anime-client",
+  "name": "tsuki-anime",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Yukigamine/tsuki-anime.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Yukigamine/tsuki-anime/issues"
+  },
+  "homepage": "https://github.com/Yukigamine/tsuki-anime#readme",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
@@ -47,17 +55,21 @@
     "@commitlint/config-conventional": "21.0.1",
     "@commitlint/types": "21.0.1",
     "@prisma/adapter-pg": "7.8.0",
+    "@serwist/next": "9.5.11",
+    "@serwist/turbopack": "9.5.11",
     "@types/node": "25.9.1",
     "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
     "dotenv": "17.4.2",
+    "esbuild": "0.28.0",
     "graphql-zeus": "7.2.1",
     "husky": "9.1.7",
     "knip": "6.14.2",
     "lint-staged": "17.0.5",
     "server-only": "0.0.1",
+    "serwist": "9.5.11",
     "tsx": "4.22.3",
     "typescript": "6.0.3"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.14.0"
 }

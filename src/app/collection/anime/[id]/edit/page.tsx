@@ -6,7 +6,7 @@ import prisma from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 
 export const metadata: Metadata = {
-  title: "Edit Collection Item – Tsuki Client",
+  title: "Edit Collection Item – Tsuki Anime",
 };
 
 type Props = { params: Promise<{ id: string }> };

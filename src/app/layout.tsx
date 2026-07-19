@@ -1,10 +1,10 @@
 import { Box } from "@mui/material";
 import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
-import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Footer from "@/components/footer";
 import NavBar from "@/components/NavBar";
 import Providers from "@/components/Providers";
+import { metadata } from "./metadata";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({
@@ -12,10 +12,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: "Tsuki Client",
-  description: "Personal anime & manga tracking",
-};
+export { metadata };
 
 export default function RootLayout({
   children,

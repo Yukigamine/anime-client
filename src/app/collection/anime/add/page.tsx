@@ -4,7 +4,7 @@ import { AnimeCollectionItemForm } from "@/components/AnimeCollectionItemForm";
 import { requireSession } from "@/lib/session";
 
 export const metadata: Metadata = {
-  title: "Add to Anime Collection – Tsuki Client",
+  title: "Add to Anime Collection – Tsuki Anime",
 };
 
 export default async function AddAnimeCollectionItemPage() {

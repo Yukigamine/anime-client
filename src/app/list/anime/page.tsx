@@ -6,7 +6,7 @@ import ListAddButton from "@/components/ListAddButton";
 import { getAnimeListSnapshot } from "@/lib/list";
 import { getSession } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Anime List – Tsuki Client" };
+export const metadata: Metadata = { title: "Anime List – Tsuki Anime" };
 export const dynamic = "force-dynamic";
 
 export default async function AnimeListPage() {

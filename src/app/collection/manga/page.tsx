@@ -8,7 +8,7 @@ import { MangaCollectionGrid } from "@/components/MangaCollectionGrid";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Manga Collection – Tsuki Client" };
+export const metadata: Metadata = { title: "Manga Collection – Tsuki Anime" };
 export const dynamic = "force-dynamic";
 
 const _FORMAT_LABELS: Record<string, string> = {

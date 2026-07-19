@@ -9,6 +9,7 @@ import {
   Typography,
 } from "@mui/material";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v16-appRouter";
+import { SerwistProvider } from "@serwist/turbopack/react";
 import {
   type CustomContentProps,
   SnackbarContent,
@@ -122,38 +123,40 @@ WarningSnackbar.displayName = "WarningSnackbar";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <AppRouterCacheProvider>
-      <ThemeProvider theme={theme} defaultMode="system">
-        <CssBaseline />
-        <GlobalStyles
-          styles={{
-            html: {
-              height: "auto",
-              overflow: "visible",
-            },
-            body: {
-              height: "auto",
-              overflow: "visible",
-            },
-          }}
-        />
-        <SnackbarProvider
-          maxSnack={3}
-          anchorOrigin={{
-            vertical: "top",
-            horizontal: "right",
-          }}
-          autoHideDuration={5000}
-          Components={{
-            success: SuccessSnackbar,
-            error: ErrorSnackbar,
-            info: InfoSnackbar,
-            warning: WarningSnackbar,
-          }}
-        >
-          <SWRProvider>{children}</SWRProvider>
-        </SnackbarProvider>
-      </ThemeProvider>
-    </AppRouterCacheProvider>
+    <SerwistProvider swUrl="/serwist/sw.js">
+      <AppRouterCacheProvider>
+        <ThemeProvider theme={theme} defaultMode="system">
+          <CssBaseline />
+          <GlobalStyles
+            styles={{
+              html: {
+                height: "auto",
+                overflow: "visible",
+              },
+              body: {
+                height: "auto",
+                overflow: "visible",
+              },
+            }}
+          />
+          <SnackbarProvider
+            maxSnack={3}
+            anchorOrigin={{
+              vertical: "top",
+              horizontal: "right",
+            }}
+            autoHideDuration={5000}
+            Components={{
+              success: SuccessSnackbar,
+              error: ErrorSnackbar,
+              info: InfoSnackbar,
+              warning: WarningSnackbar,
+            }}
+          >
+            <SWRProvider>{children}</SWRProvider>
+          </SnackbarProvider>
+        </ThemeProvider>
+      </AppRouterCacheProvider>
+    </SerwistProvider>
   );
 }

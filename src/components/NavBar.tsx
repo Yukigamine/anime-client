@@ -140,7 +140,7 @@ export default function NavBar() {
                 color: "inherit",
               }}
             >
-              Tsuki Client
+              Tsuki Anime
             </Typography>
           </Box>
 

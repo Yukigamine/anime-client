@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: anime-client-app
+    container_name: tsuki-anime-app
     env_file: .env
     ports:
       - "3000:3000"
@@ -21,12 +21,12 @@ services:
 
   postgres:
     image: postgres:17-alpine
-    container_name: anime-client-db
+    container_name: tsuki-anime-db
     env_file: .env
     environment:
       POSTGRES_USER: ${DATABASE_USER:-postgres}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
-      POSTGRES_DB: ${DATABASE_NAME:-anime_client}
+      POSTGRES_DB: ${DATABASE_NAME:-tsuki_anime}
     ports:
       - "5432:5432"
     volumes:
@@ -41,7 +41,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: anime-client-cache
+    container_name: tsuki-anime-cache
     env_file: .env
     ports:
       - "6379:6379"

@@ -5,8 +5,11 @@ const config: KnipConfig = {
   ignoreDependencies: [
     "@neondatabase/serverless",
     "@prisma/client",
+    "@serwist/next",
+    "@serwist/turbopack",
     "shallow-clone",
     "graphql-zeus",
+    "serwist",
   ],
 };
 

@@ -4,7 +4,7 @@ import { getAnimeDetailSnapshot } from "@/lib/media-detail";
 import prisma from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 
-export const metadata: Metadata = { title: "Anime Details – Tsuki Client" };
+export const metadata: Metadata = { title: "Anime Details – Tsuki Anime" };
 export const dynamic = "force-dynamic";
 
 type Props = { params: Promise<{ slug: string; kitsuId: string }> };

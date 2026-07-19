@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { buildAniListAuthUrl } from "@/lib/anilist/auth";
 import { getSession } from "@/lib/session";
 
-export const metadata: Metadata = { title: "AniList Login – Tsuki Client" };
+export const metadata: Metadata = { title: "AniList Login – Tsuki Anime" };
 
 export default async function AniListLoginPage() {
   const session = await getSession();
